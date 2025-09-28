@@ -32,7 +32,9 @@ add_dependencies(cadical cadical_build)
 
 # TODO: Project-specific configuration
 
-add_executable(pdrtpa src/main.cpp)
+add_executable(pdrtpa
+        src/logic.hpp
+        src/main.cpp)
 target_link_libraries(pdrtpa PUBLIC aiger)
 target_link_libraries(pdrtpa PUBLIC cadical)
 
@@ -40,7 +42,9 @@ target_include_directories(pdrtpa PUBLIC "${CMAKE_SOURCE_DIR}/src")
 target_include_directories(pdrtpa PUBLIC "${AIGER_HEADER_DIR}")
 target_include_directories(pdrtpa PUBLIC "${CADICAL_HEADER_DIR}")
 
-#add_library(pdrtpa-lib STATIC)
+#add_library(pdrtpa-lib STATIC
+#    src/logic.hpp)
+#
 #target_link_libraries(pdrtpa-lib PUBLIC aiger)
 #target_link_libraries(pdrtpa-lib PUBLIC cadical)
 #
