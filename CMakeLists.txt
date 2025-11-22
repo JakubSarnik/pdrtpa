@@ -34,6 +34,7 @@ add_dependencies(cadical cadical_build)
 
 add_executable(pdrtpa
         src/logic.hpp
+        src/logger.hpp
         src/main.cpp)
 target_link_libraries(pdrtpa PUBLIC aiger)
 target_link_libraries(pdrtpa PUBLIC cadical)
