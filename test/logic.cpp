@@ -1,6 +1,7 @@
 #include "common.hpp"
 #include "logic.hpp"
 #include <algorithm>
+#include <vector>
 
 TEST_CASE( "Variables have the expected ids" )
 {
