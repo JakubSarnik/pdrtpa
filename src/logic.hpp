@@ -178,6 +178,8 @@ class cnf_formula
     std::vector< literal > _literals;
 
 public:
+    friend auto operator<=>( const cnf_formula&, const cnf_formula& ) = default;
+
     static cnf_formula constant( bool value )
     {
         if ( value )
