@@ -32,7 +32,7 @@ void propagate_trues( aiger_info& info )
         if ( is_true( info, rhs0 ) && is_true( info, rhs1 ) )
             info.true_literals.emplace( lhs );
         else if ( is_false( info, rhs0 ) || is_false( info, rhs1 ) )
-            info.true_literals.emplace( aiger_not( lhs ) ); // NOLINT
+            info.true_literals.emplace( aiger_not( lhs ) );
     }
 }
 
