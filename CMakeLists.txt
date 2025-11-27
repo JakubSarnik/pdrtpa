@@ -31,10 +31,11 @@ set_target_properties(cadical PROPERTIES IMPORTED_LOCATION "${CADICAL_BINARY_DIR
 add_dependencies(cadical cadical_build)
 
 add_library(pdrtpa-lib STATIC
-    src/logic.hpp
-    src/logger.hpp
-    src/aiger_builder.hpp
-    src/aiger_builder.cpp)
+        src/logic.hpp
+        src/logger.hpp
+        src/aiger_builder.hpp
+        src/aiger_builder.cpp
+        src/transition_system.hpp)
 
 target_link_libraries(pdrtpa-lib PUBLIC aiger)
 target_link_libraries(pdrtpa-lib PUBLIC cadical)
