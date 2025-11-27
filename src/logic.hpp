@@ -158,8 +158,7 @@ public:
         return literal{ var, positive() };
     }
 
-    [[nodiscard]]
-    std::string to_string() const
+    [[nodiscard]] std::string to_string() const
     {
         if ( positive() )
             return std::to_string( _value );
@@ -248,8 +247,7 @@ public:
                 lit = f( lit );
     }
 
-    [[nodiscard]]
-    cnf_formula activate( variable activator ) const
+    [[nodiscard]] cnf_formula activate( variable activator ) const
     {
         auto res = cnf_formula{};
         res._literals.reserve( _literals.size() );
@@ -265,8 +263,7 @@ public:
         return res;
     }
 
-    [[nodiscard]]
-    cube as_cube() const;
+    [[nodiscard]] cube as_cube() const;
 };
 
 // Representation of cubes makes use of literal ordering which is more
@@ -309,15 +306,13 @@ public:
     // Returns true if this syntactically subsumes that, i.e. if literals in
     // this form a subset of literals in that. Note that c.subsumes( d ) = true
     // guarantees that d entails c.
-    [[nodiscard]]
-    bool subsumes( const cube& that ) const
+    [[nodiscard]] bool subsumes( const cube& that ) const
     {
         return std::ranges::includes( that._literals, _literals, cube_literal_lt );
     }
 
     // Returns the cube negated as a cnf_formula containing a single clause.
-    [[nodiscard]]
-    cnf_formula negate() const
+    [[nodiscard]] cnf_formula negate() const
     {
         auto f = cnf_formula{};
         f.add_clause( _literals );
@@ -330,8 +325,7 @@ public:
         return f;
     }
 
-    [[nodiscard]]
-    bool contains( literal lit ) const
+    [[nodiscard]] bool contains( literal lit ) const
     {
         // TODO: Sequential search is probably faster here...
         return std::ranges::binary_search( _literals, lit, cube_literal_lt );
@@ -341,8 +335,7 @@ public:
     // variable but different polarities, return the literal in which the given
     // variable appears in the cube (or nothing if the variable doesn't appear
     // at all).
-    [[nodiscard]]
-    std::optional< literal > find( variable var ) const
+    [[nodiscard]] std::optional< literal > find( variable var ) const
     {
         const auto lit = literal{ var };
 
@@ -354,8 +347,7 @@ public:
         return {};
     }
 
-    [[nodiscard]]
-    std::string to_string() const
+    [[nodiscard]] std::string to_string() const
     {
         auto res = std::string{};
         auto sep = "";
