@@ -4,6 +4,8 @@
 #include "transition_system.hpp"
 #include "aiger.h"
 #include <unordered_set>
+#include <expected>
+#include <string>
 
 namespace builder
 {
@@ -41,9 +43,6 @@ struct aiger_info
     // any other latch can be deleted from the system completely (it does not
     // appear in the error formula by definition).
     std::unordered_set< aiger_literal > error_coi;
-
-    aiger_info( aiger_info& ) = delete;
-    aiger_info& operator=( const aiger_info& ) = delete;
 };
 
 struct context
@@ -55,5 +54,11 @@ struct context
     variable_range next_state_vars;
     variable_range and_vars;
 };
+
+std::expected< aiger_info, std::string > make_aiger_info( aiger& aig );
+context make_context( variable_store& store, aiger_info& info );
+transition_system build_from_context( context& ctx );
+
+std::expected< transition_system, std::string > build_from_aiger( variable_store& store, aiger& aig );
 
 }
