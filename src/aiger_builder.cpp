@@ -100,19 +100,157 @@ void determine_coi( aiger_info& info )
     }
 }
 
+literal from_aiger_lit( const context& ctx, aiger_literal lit )
+{
+    const auto from_aiger_var = [ & ]( aiger_literal var )
+    {
+        // The aiger lib expects this to be a positive literal (i.e. a variable).
+        assert( var % 2 == 0 );
+        assert( var >= 2 ); // Not constants true/false
+
+        if ( const auto *ptr = aiger_is_input( ctx.preprocessed_aiger.aig, var ); ptr )
+            return ctx.input_vars.nth( static_cast< int >( ptr - ctx.preprocessed_aiger.aig->inputs ) );
+        if ( const auto *ptr = aiger_is_latch( ctx.preprocessed_aiger.aig, var ); ptr )
+            return assert( ctx.state_vars_table.contains( lit ) ), ctx.state_vars_table.at( lit );
+        if ( const auto *ptr = aiger_is_and( ctx.preprocessed_aiger.aig, var ); ptr )
+            return ctx.and_vars.nth( static_cast< int >( ptr - ctx.preprocessed_aiger.aig->ands ) );
+
+        assert( false && "Unreachable code reached" );
+        std::unreachable();
+    };
+
+    return literal
+    {
+        from_aiger_var( aiger_strip( lit ) ), // NOLINT
+        aiger_sign( lit ) == 1 // NOLINT
+    };
+}
+
+// Turn an Aiger declaration
+//   lhs = rhs0 /\ rhs1
+// into a set of clauses using a Tseitin transformation. This must take care
+// when either of rhs0/rhs1 is a constant 0 (false) or 1 (true).
+void clausify_and( const context& ctx, const aiger_and& conj, cnf_formula& result )
+{
+    const auto mk_lit = [ & ]( aiger_literal lit )
+    {
+        return from_aiger_lit( ctx, lit );
+    };
+
+    const auto make_equivalence = [ & ]( aiger_literal x, aiger_literal y ){
+        // x = y [i.e. x <-> y]
+        // ~> (x -> y) /\ (y -> x)
+        // ~> (-x \/ y) /\ (-y \/ x)
+
+        result.add_clause( !mk_lit( x ), mk_lit( y ) );
+        result.add_clause( !mk_lit( y ), mk_lit( x ) );
+    };
+
+    const auto [ lhs, rhs0, rhs1 ] = conj;
+
+    assert( !is_decided( ctx.preprocessed_aiger, lhs ) );
+
+    // It cannot happen that both rhs0 and rhs1 are true (otherwise lhs would
+    // be decided as true) or either of them is false (lhs would be decided
+    // as false).
+
+    if ( is_true( ctx.preprocessed_aiger, rhs0 ) )
+        make_equivalence( lhs, rhs1 );
+    else if ( is_true( ctx.preprocessed_aiger, rhs1 ) )
+        make_equivalence( lhs, rhs0 );
+    else
+    {
+        // lhs = rhs0 /\ rhs1
+        // ~> (lhs -> rhs0) /\ (lhs -> rhs1) /\ (rhs0 /\ rhs1 -> lhs)
+        // ~> (-lhs \/ rhs0) /\ (-lhs \/ rhs1) /\ (-rhs0 \/ -rhs1 \/ lhs)
+
+        result.add_clause( !mk_lit( lhs ), mk_lit( rhs0 ) );
+        result.add_clause( !mk_lit( lhs ), mk_lit( rhs1 ) );
+        result.add_clause( !mk_lit( rhs0 ), !mk_lit( rhs1 ), mk_lit( lhs ) );
+    }
+}
+
+// Do a reverse traversal from the Aiger literals representing the results
+// through all the ANDs and ending with leaves consisting of state variables
+// and inputs.
+//
+// NOTE: Aiger literals are the numbers in the aiger file
+// ([0 .. 2 * (aig.maxvar) + 1]; 0 = false, 1 = true), which does NOT
+// correspond to our variable ordering.
+//
+// Notably, aiger literal's parity denotes whether it's positive (even)
+// or negative (odd).
+cnf_formula clausify_subgraph( const context& ctx, std::unordered_set< aiger_literal > required )
+{
+    auto result = cnf_formula{};
+
+    for ( auto i = static_cast< int >( ctx.preprocessed_aiger.aig->num_ands ) - 1; i >= 0; --i )
+    {
+        const auto conj = ctx.preprocessed_aiger.aig->ands[ i ];
+        const auto [ lhs, rhs0, rhs1 ] = conj;
+
+        if ( !required.contains( lhs ) && !required.contains( aiger_not( lhs ) ) )
+            continue;
+
+        if ( is_decided( ctx.preprocessed_aiger, lhs ) )
+            continue;
+
+        // If lhs is required and not decided state variable, it must influence
+        // the error, otherwise we are doing work for nothing.
+
+        assert( !aiger_is_latch( ctx.preprocessed_aiger.aig, lhs ) ||
+            influences_error( ctx.preprocessed_aiger, lhs ) );
+
+        clausify_and( ctx, conj, result );
+
+        required.insert( rhs0 );
+        required.insert( rhs1 );
+    }
+
+    return result;
+}
+
 cnf_formula build_init( const context& ctx )
 {
-    // TODO
+    auto init = cnf_formula{};
+
+    for ( auto i = 0u; i < ctx.preprocessed_aiger.aig->num_latches; ++i )
+    {
+        const auto latch = ctx.preprocessed_aiger.aig->latches[ i ];
+        const auto lit = latch.lit;
+        const auto reset = latch.reset;
+
+        // In Aiger 1.9, the reset can be either 0 (initialized as false),
+        // 1 (initialized as true) or equal to the latch literal, which means
+        // that the latch has a nondeterministic initial value.
+
+        if ( influences_error( ctx.preprocessed_aiger, lit ) && aiger_is_constant( reset ) )
+            init.add_clause( literal{ ctx.state_vars_table.at( lit ), reset == aiger_true } );
+    }
+
+    return init;
 }
 
 cnf_formula build_trans( const context& ctx )
 {
-    // TODO
+    return cnf_formula::constant( false ); // TODO
 }
 
 cnf_formula build_error( const context& ctx )
 {
+    const auto error_literal = get_error_literal( ctx.preprocessed_aiger );
 
+    if ( is_true( ctx.preprocessed_aiger, error_literal ) )
+        return cnf_formula::constant( true );
+    if ( is_false( ctx.preprocessed_aiger, error_literal ) )
+        return cnf_formula::constant( false );
+
+    auto error = clausify_subgraph( ctx, { error_literal } );
+
+    // An error happens when the error literal is true.
+    error.add_clause( from_aiger_lit( ctx, error_literal ) );
+
+    return error;
 }
 
 }
@@ -157,28 +295,42 @@ context make_context( variable_store& store, const aiger_info& info )
         if ( influences_error( info, info.aig->latches[ i ].lit ) )
             ++num_state_vars;
 
+    const auto input_vars = store.make_range( static_cast< int >( info.aig->num_inputs ) );
+    const auto state_vars = store.make_range( num_state_vars );
+    const auto next_state_vars = store.make_range( num_state_vars );
+    const auto and_vars = store.make_range( static_cast< int >( info.aig->num_ands ) );
+
+    auto state_vars_table = std::unordered_map< aiger_literal, variable >{};
+    auto j = 0;
+
+    for ( auto i = 0u; i < info.aig->num_latches; ++i )
+        if ( const auto lit = info.aig->latches[ i ].lit; influences_error( info, lit ) )
+            state_vars_table.emplace( lit, state_vars.nth( j++ ) );
+
     return context
     {
         .preprocessed_aiger = info,
-        .input_vars = store.make_range( static_cast< int >( info.aig->num_inputs ) ),
-        .state_vars = store.make_range( num_state_vars ),
-        .next_state_vars = store.make_range( num_state_vars ),
-        .and_vars = store.make_range( static_cast< int >( info.aig->num_ands ) )
+        .input_vars = input_vars,
+        .state_vars = state_vars,
+        .next_state_vars = next_state_vars,
+        .and_vars = and_vars,
+        .state_vars_table = std::move( state_vars_table )
     };
 }
 
 transition_system build_from_context( const context& ctx )
 {
-    auto init = build_init( ctx );
-    auto trans = build_trans( ctx );
-    auto error = build_error( ctx );
+    auto initial_cube = std::vector< bool >{};
 
-    // TODO: We need to build a translation table from aiger latch literals
-    //       to variable offsets, preferably in make_context, and store the
-    //       table (in the context probably), together with a function
-    //       from_aiger_lit.
+    for ( auto i = 0u; i < ctx.preprocessed_aiger.aig->num_latches; ++i )
+        if ( const auto reset = ctx.preprocessed_aiger.aig->latches[ i ].reset; aiger_is_constant( reset ) )
+            initial_cube.push_back( reset == aiger_true );
 
-    // TODO: Return the system
+    return transition_system
+    {
+        ctx.input_vars, ctx.state_vars, ctx.next_state_vars, ctx.and_vars, std::move( initial_cube ),
+        build_init( ctx ), build_trans( ctx ), build_error( ctx )
+    };
 }
 
 std::expected< transition_system, std::string > build_from_aiger( variable_store& store, aiger& aig )

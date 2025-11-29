@@ -4,6 +4,7 @@
 #include "transition_system.hpp"
 #include "aiger.h"
 #include <unordered_set>
+#include <unordered_map>
 #include <expected>
 #include <string>
 
@@ -53,6 +54,8 @@ struct context
     variable_range state_vars;
     variable_range next_state_vars;
     variable_range and_vars;
+
+    std::unordered_map< aiger_literal, variable > state_vars_table;
 };
 
 std::expected< aiger_info, std::string > make_aiger_info( aiger& aig );

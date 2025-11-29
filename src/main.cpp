@@ -1,6 +1,7 @@
 #include "aiger.h"
 #include "logic.hpp"
 #include "logger.hpp"
+#include "aiger_builder.hpp"
 #include <print>
 #include <string>
 #include <optional>
@@ -69,5 +70,19 @@ int main( int argc, char** argv )
         return 1;
     }
 
-    logger::log_loud( "OK\n" );
+    logger::log_line_loud( "OK" );
+    logger::log_loud( "Building the transition system... " );
+
+    auto store = variable_store{};
+    auto system = builder::build_from_aiger( store, *aig );
+
+    if ( !system.has_value() )
+    {
+        std::println( "Error: {}", system.error() );
+        return 1;
+    }
+
+    logger::log_line_loud( "OK" );
+    logger::log_line_debug( "\tAiger latches:   {}", aig->num_latches );
+    logger::log_line_debug( "\tState variables: {}", system->state_vars().size() );
 }
