@@ -200,8 +200,6 @@ public:
 
     void add_clause( std::span< const literal > clause )
     {
-        // TODO: Do we want the reserve here?
-        _literals.reserve( _literals.size() + clause.size() + 1 );
         _literals.insert( _literals.end(), clause.begin(), clause.end() );
         _literals.push_back( literal::separator );
     }
