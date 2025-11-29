@@ -33,7 +33,7 @@ class transition_system
     // whole initial cube as given in the aiger file (and in the same order)
     // to print the initial state of the counterexample trace.
 
-    std::vector< literal > _initial_cube;
+    std::vector< bool > _initial_cube;
 
     cnf_formula _init;
     cnf_formula _trans;
@@ -41,7 +41,7 @@ class transition_system
 
 public:
     transition_system( variable_range input_vars, variable_range state_vars, variable_range next_state_vars,
-                       variable_range aux_vars, std::vector< literal > init_cube, cnf_formula init,
+                       variable_range aux_vars, std::vector< bool > init_cube, cnf_formula init,
                        cnf_formula trans, cnf_formula error )
             : _input_vars{ input_vars }, _state_vars{ state_vars }, _next_state_vars{ next_state_vars },
               _aux_vars{ aux_vars }, _initial_cube( std::move( init_cube ) ), _init{ std::move( init ) },
@@ -55,7 +55,7 @@ public:
     [[nodiscard]] variable_range next_state_vars() const { return _next_state_vars; };
     [[nodiscard]] variable_range aux_vars() const { return _aux_vars; }
 
-    [[nodiscard]] const std::vector< literal >& initial_cube() const { return _initial_cube; }
+    [[nodiscard]] const std::vector< bool >& initial_cube() const { return _initial_cube; }
 
     [[nodiscard]] const cnf_formula& init() const { return _init; }
     [[nodiscard]] const cnf_formula& trans() const { return _trans; }
