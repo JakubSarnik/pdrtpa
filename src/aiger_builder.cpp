@@ -111,7 +111,7 @@ literal from_aiger_lit( const context& ctx, aiger_literal lit )
         if ( const auto *ptr = aiger_is_input( ctx.preprocessed_aiger.aig, var ); ptr )
             return ctx.input_vars.nth( static_cast< int >( ptr - ctx.preprocessed_aiger.aig->inputs ) );
         if ( const auto *ptr = aiger_is_latch( ctx.preprocessed_aiger.aig, var ); ptr )
-            return assert( ctx.state_vars_table.contains( lit ) ), ctx.state_vars_table.at( lit );
+            return assert( ctx.state_vars_table.contains( var ) ), ctx.state_vars_table.at( var );
         if ( const auto *ptr = aiger_is_and( ctx.preprocessed_aiger.aig, var ); ptr )
             return ctx.and_vars.nth( static_cast< int >( ptr - ctx.preprocessed_aiger.aig->ands ) );
 
