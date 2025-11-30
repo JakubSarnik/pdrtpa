@@ -26,23 +26,20 @@ struct aiger_info
 
     // Aiger literals that are necessarily true. For any literal here, its
     // negation aiger_not( lit ) is necessarily false. This is used to
-    // propagate constants and simplify the clausified formula. These don't
-    // need to be computed in the transition formula (i.e. can be set as
-    // x' = true or x' = false respectively), but they need to actually exist
-    // in the formula because they can occur in the error formula.
-    // Alternatively, they could be syntactically eliminated, or substituted
-    // for a pair of values xtrue and xfalse that are kept true and false,
-    // respectively, throughout the computation.
-    // TODO: If there is any true state variable, make the first one xtrue.
-    //       If there is any false state variable, make the first one xfalse.
+    // propagate constants and simplify the clausified formula. State variables
+    // that are determined (i.e. always equal to true or false) don't need to
+    // be computed in the transition formula (i.e. could be set as x' = true
+    // or x' = false, respectively), or even better, can be removed from the
+    // transition system completely, as long as we ensure that they don't
+    // appear in the init, trans and error formulae.
     std::unordered_set< aiger_literal > true_literals;
 
     // The cone of influence of the error formula. Contains literals
     // corresponding to the latches that are necessary to decide the value
     // of the error literal. Any other latch x can have x' = false in the
     // transition formula and this won't compromise correctness. Even better,
-    // any other latch can be deleted from the system completely (it does not
-    // appear in the error formula by definition).
+    // any other latch can be simply deleted from the system completely (it
+    // does not appear in the error formula by definition).
     std::unordered_set< aiger_literal > error_coi;
 };
 

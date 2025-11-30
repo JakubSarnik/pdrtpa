@@ -121,8 +121,8 @@ literal from_aiger_lit( const context& ctx, aiger_literal lit )
 
     return literal
     {
-        from_aiger_var( aiger_strip( lit ) ), // NOLINT
-        aiger_sign( lit ) == 1 // NOLINT
+        from_aiger_var( aiger_strip( lit ) ),
+        aiger_sign( lit ) == 1
     };
 }
 
@@ -153,6 +153,10 @@ void clausify_and( const context& ctx, const aiger_and& conj, cnf_formula& resul
     // It cannot happen that both rhs0 and rhs1 are true (otherwise lhs would
     // be decided as true) or either of them is false (lhs would be decided
     // as false).
+
+    assert( !( is_true( ctx.preprocessed_aiger, rhs0 ) && is_true( ctx.preprocessed_aiger, rhs1 ) ) );
+    assert( !is_false( ctx.preprocessed_aiger, rhs0 ) );
+    assert( !is_false( ctx.preprocessed_aiger, rhs1 ) );
 
     if ( is_true( ctx.preprocessed_aiger, rhs0 ) )
         make_equivalence( lhs, rhs1 );
@@ -195,8 +199,8 @@ cnf_formula clausify_subgraph( const context& ctx, std::unordered_set< aiger_lit
         if ( is_decided( ctx.preprocessed_aiger, lhs ) )
             continue;
 
-        // If lhs is required and not decided state variable, it must influence
-        // the error, otherwise we are doing work for nothing.
+        // If lhs is a required and not decided state variable, it must
+        // influence the error, otherwise we are doing work for nothing.
 
         assert( !aiger_is_latch( ctx.preprocessed_aiger.aig, lhs ) ||
             influences_error( ctx.preprocessed_aiger, lhs ) );
