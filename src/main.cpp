@@ -66,7 +66,7 @@ int main( int argc, char** argv )
 
     if ( msg != nullptr )
     {
-        std::println( "Error: {}", msg );
+        std::println( "\nError: {}", msg );
         return 1;
     }
 
@@ -78,7 +78,7 @@ int main( int argc, char** argv )
 
     if ( !system.has_value() )
     {
-        std::println( "Error: {}", system.error() );
+        std::println( "\nError: {}", system.error() );
         return 1;
     }
 
