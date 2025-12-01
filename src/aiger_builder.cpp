@@ -36,14 +36,40 @@ void propagate_trues( aiger_info& info )
 {
     info.true_literals.emplace( aiger_true );
 
-    for ( auto i = 0u; i < info.aig->num_ands; ++i )
-    {
-        const auto [ lhs, rhs0, rhs1 ] = info.aig->ands[ i ];
+    auto changed = true;
 
-        if ( is_true( info, rhs0 ) && is_true( info, rhs1 ) )
-            info.true_literals.emplace( lhs );
-        else if ( is_false( info, rhs0 ) || is_false( info, rhs1 ) )
-            info.true_literals.emplace( aiger_not( lhs ) );
+    while ( changed )
+    {
+        changed = false;
+
+        for ( auto i = 0u; i < info.aig->num_ands; ++i )
+        {
+            const auto [ lhs, rhs0, rhs1 ] = info.aig->ands[ i ];
+
+            if ( is_true( info, rhs0 ) && is_true( info, rhs1 ) )
+                changed |= info.true_literals.emplace( lhs ).second;
+            else if ( is_false( info, rhs0 ) || is_false( info, rhs1 ) )
+                changed |= info.true_literals.emplace( aiger_not( lhs ) ).second;
+        }
+
+        // A variable x can be safely dropped from the system if
+        // - it's determined in the next state (i.e. x' = true or x' = false), and
+        // - its initial state is equal to the determined next state (i.e. x is
+        //   set to true, and we have x' = true, and equivalently for false).
+        //
+        // The second point is important, as a variable which is determined in
+        // the next state but can change in the first step cannot be removed from
+        // the system without missing some potential erroneous initial states.
+
+        for ( auto i = 0u; i < info.aig->num_latches; ++i )
+        {
+            const auto& latch = info.aig->latches[ i ];
+
+            if ( is_true( info, latch.next ) && latch.reset == aiger_true )
+                changed |= info.true_literals.emplace( latch.lit ).second;
+            else if ( is_false( info, latch.next ) && latch.reset == aiger_false )
+                changed |= info.true_literals.emplace( aiger_not( latch.lit ) ).second;
+        }
     }
 }
 
@@ -102,18 +128,20 @@ void determine_coi( aiger_info& info )
 
 literal from_aiger_lit( const context& ctx, aiger_literal lit )
 {
+    const auto& aiger = ctx.preprocessed_aiger;
+
     const auto from_aiger_var = [ & ]( aiger_literal var )
     {
         // The aiger lib expects this to be a positive literal (i.e. a variable).
         assert( var % 2 == 0 );
         assert( var >= 2 ); // Not constants true/false
 
-        if ( const auto *ptr = aiger_is_input( ctx.preprocessed_aiger.aig, var ); ptr )
-            return ctx.input_vars.nth( static_cast< int >( ptr - ctx.preprocessed_aiger.aig->inputs ) );
-        if ( const auto *ptr = aiger_is_latch( ctx.preprocessed_aiger.aig, var ); ptr )
+        if ( const auto *ptr = aiger_is_input( aiger.aig, var ); ptr )
+            return ctx.input_vars.nth( static_cast< int >( ptr - aiger.aig->inputs ) );
+        if ( const auto *ptr = aiger_is_latch( aiger.aig, var ); ptr )
             return assert( ctx.state_vars_table.contains( var ) ), ctx.state_vars_table.at( var );
-        if ( const auto *ptr = aiger_is_and( ctx.preprocessed_aiger.aig, var ); ptr )
-            return ctx.and_vars.nth( static_cast< int >( ptr - ctx.preprocessed_aiger.aig->ands ) );
+        if ( const auto *ptr = aiger_is_and( aiger.aig, var ); ptr )
+            return ctx.and_vars.nth( static_cast< int >( ptr - aiger.aig->ands ) );
 
         assert( false && "Unreachable code reached" );
         std::unreachable();
@@ -146,21 +174,22 @@ void clausify_and( const context& ctx, const aiger_and& conj, cnf_formula& resul
         result.add_clause( !mk_lit( y ), mk_lit( x ) );
     };
 
+    const auto& aiger = ctx.preprocessed_aiger;
     const auto [ lhs, rhs0, rhs1 ] = conj;
 
-    assert( !is_decided( ctx.preprocessed_aiger, lhs ) );
+    assert( !is_decided( aiger, lhs ) );
 
     // It cannot happen that both rhs0 and rhs1 are true (otherwise lhs would
     // be decided as true) or either of them is false (lhs would be decided
     // as false).
 
-    assert( !( is_true( ctx.preprocessed_aiger, rhs0 ) && is_true( ctx.preprocessed_aiger, rhs1 ) ) );
-    assert( !is_false( ctx.preprocessed_aiger, rhs0 ) );
-    assert( !is_false( ctx.preprocessed_aiger, rhs1 ) );
+    assert( !( is_true( aiger, rhs0 ) && is_true( aiger, rhs1 ) ) );
+    assert( !is_false( aiger, rhs0 ) );
+    assert( !is_false( aiger, rhs1 ) );
 
-    if ( is_true( ctx.preprocessed_aiger, rhs0 ) )
+    if ( is_true( aiger, rhs0 ) )
         make_equivalence( lhs, rhs1 );
-    else if ( is_true( ctx.preprocessed_aiger, rhs1 ) )
+    else if ( is_true( aiger, rhs1 ) )
         make_equivalence( lhs, rhs0 );
     else
     {
@@ -186,24 +215,25 @@ void clausify_and( const context& ctx, const aiger_and& conj, cnf_formula& resul
 // or negative (odd).
 cnf_formula clausify_subgraph( const context& ctx, std::unordered_set< aiger_literal > required )
 {
+    const auto& aiger = ctx.preprocessed_aiger;
     auto result = cnf_formula{};
 
-    for ( auto i = static_cast< int >( ctx.preprocessed_aiger.aig->num_ands ) - 1; i >= 0; --i )
+    for ( auto i = static_cast< int >( aiger.aig->num_ands ) - 1; i >= 0; --i )
     {
-        const auto conj = ctx.preprocessed_aiger.aig->ands[ i ];
+        const auto conj = aiger.aig->ands[ i ];
         const auto [ lhs, rhs0, rhs1 ] = conj;
 
         if ( !required.contains( lhs ) && !required.contains( aiger_not( lhs ) ) )
             continue;
 
-        if ( is_decided( ctx.preprocessed_aiger, lhs ) )
+        if ( is_decided( aiger, lhs ) )
             continue;
 
         // If lhs is a required and not decided state variable, it must
         // influence the error, otherwise we are doing work for nothing.
 
-        assert( !aiger_is_latch( ctx.preprocessed_aiger.aig, lhs ) ||
-            influences_error( ctx.preprocessed_aiger, lhs ) );
+        assert( !aiger_is_latch( aiger.aig, lhs ) ||
+            influences_error( aiger, lhs ) );
 
         clausify_and( ctx, conj, result );
 
@@ -216,11 +246,12 @@ cnf_formula clausify_subgraph( const context& ctx, std::unordered_set< aiger_lit
 
 cnf_formula build_init( const context& ctx )
 {
+    const auto &aiger = ctx.preprocessed_aiger;
     auto init = cnf_formula{};
 
-    for ( auto i = 0u; i < ctx.preprocessed_aiger.aig->num_latches; ++i )
+    for ( auto i = 0u; i < aiger.aig->num_latches; ++i )
     {
-        const auto latch = ctx.preprocessed_aiger.aig->latches[ i ];
+        const auto latch = aiger.aig->latches[ i ];
         const auto lit = latch.lit;
         const auto reset = latch.reset;
 
@@ -228,25 +259,73 @@ cnf_formula build_init( const context& ctx )
         // 1 (initialized as true) or equal to the latch literal, which means
         // that the latch has a nondeterministic initial value.
 
-        if ( influences_error( ctx.preprocessed_aiger, lit ) && aiger_is_constant( reset ) )
+        if ( influences_error( aiger, lit ) && aiger_is_constant( reset ) )
             init.add_clause( literal{ ctx.state_vars_table.at( lit ), reset == aiger_true } );
     }
 
     return init;
 }
 
+// For each state variable x and its primed (next state) variant x' (except
+// those which cannot influence the error), add a conjunct x' = phi, where phi
+// is the formula represented by the AIG subgraph ending in the 'next' literal
+// of the aiger literal for x.
 cnf_formula build_trans( const context& ctx )
 {
-    return cnf_formula::constant( false ); // TODO
+    const auto &aiger = ctx.preprocessed_aiger;
+    auto roots = std::unordered_set< aiger_literal >{};
+
+    for ( auto i = 0u; i < aiger.aig->num_latches; ++i )
+    {
+        const auto latch = aiger.aig->latches[ i ];
+        const auto aig_literal = latch.lit;
+        const auto next_aig_literal = latch.next;
+
+        if ( influences_error( aiger, aig_literal ) )
+            roots.insert( next_aig_literal );
+    }
+
+    auto trans = clausify_subgraph( ctx, std::move( roots ) );
+
+    for ( auto i = 0u; i < aiger.aig->num_latches; ++i )
+    {
+        const auto latch = aiger.aig->latches[ i ];
+        const auto aig_literal = latch.lit;
+        const auto next_aig_literal = aiger.aig->latches[ i ].next;
+
+        if ( !influences_error( aiger, aig_literal ) )
+            continue;
+
+        const auto curr = from_aiger_lit( ctx, aig_literal );
+        const auto next = literal{ ctx.next_state_vars.nth( ctx.state_vars.offset( curr.var() ) ) };
+
+        if ( is_true( aiger, next_aig_literal ) )
+            trans.add_clause( next ); // x' = true
+        else if ( is_false( aiger, next_aig_literal ) )
+            trans.add_clause( !next ); // x' = false
+        else
+        {
+            // x' = phi
+            // (x' is stored in next, phi is computed in result_aig_literal)
+            // ~> (x' -> phi) /\ (phi -> x')
+            // ~> (-x' \/ phi) /\ (-phi \/ x')
+
+            trans.add_clause( !next, from_aiger_lit( ctx, next_aig_literal ) );
+            trans.add_clause( !from_aiger_lit( ctx, next_aig_literal ), next );
+        }
+    }
+
+    return trans;
 }
 
 cnf_formula build_error( const context& ctx )
 {
-    const auto error_literal = get_error_literal( ctx.preprocessed_aiger );
+    const auto& aiger = ctx.preprocessed_aiger;
+    const auto error_literal = get_error_literal( aiger );
 
-    if ( is_true( ctx.preprocessed_aiger, error_literal ) )
+    if ( is_true( aiger, error_literal ) )
         return cnf_formula::constant( true );
-    if ( is_false( ctx.preprocessed_aiger, error_literal ) )
+    if ( is_false( aiger, error_literal ) )
         return cnf_formula::constant( false );
 
     auto error = clausify_subgraph( ctx, { error_literal } );
@@ -294,7 +373,6 @@ context make_context( variable_store& store, const aiger_info& info )
 
     auto num_state_vars = 0;
 
-    // TODO: Is this possible? We remove every determined state variable!
     for ( auto i = 0u; i < info.aig->num_latches; ++i )
         if ( influences_error( info, info.aig->latches[ i ].lit ) )
             ++num_state_vars;
