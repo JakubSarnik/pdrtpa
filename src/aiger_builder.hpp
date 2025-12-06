@@ -80,7 +80,7 @@ inline literal from_aiger_lit( const context& ctx, aiger_literal lit )
     return literal
     {
         from_aiger_var( aiger_strip( lit ) ),
-        aiger_sign( lit ) == 1
+        aiger_sign( lit ) == 0
     };
 }
 
