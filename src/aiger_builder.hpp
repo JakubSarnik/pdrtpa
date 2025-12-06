@@ -85,8 +85,8 @@ inline literal from_aiger_lit( const context& ctx, aiger_literal lit )
 }
 
 std::expected< aiger_info, std::string > make_aiger_info( aiger& aig );
-context make_context( variable_store& store, aiger_info& info );
-transition_system build_from_context( context& ctx );
+context make_context( variable_store& store, const aiger_info& info );
+transition_system build_from_context( const context& ctx );
 
 std::expected< transition_system, std::string > build_from_aiger( variable_store& store, aiger& aig );
 
