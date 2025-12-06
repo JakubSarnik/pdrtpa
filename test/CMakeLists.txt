@@ -4,6 +4,7 @@ add_executable(test
         common.hpp
         logic.cpp
         transition_system.cpp
+        aiger_builder.cpp
 )
 
 target_link_libraries(test PRIVATE Catch2::Catch2WithMain)
