@@ -126,34 +126,6 @@ void determine_coi( aiger_info& info )
     }
 }
 
-literal from_aiger_lit( const context& ctx, aiger_literal lit )
-{
-    const auto& aiger = ctx.preprocessed_aiger;
-
-    const auto from_aiger_var = [ & ]( aiger_literal var )
-    {
-        // The aiger lib expects this to be a positive literal (i.e. a variable).
-        assert( var % 2 == 0 );
-        assert( var >= 2 ); // Not constants true/false
-
-        if ( const auto *ptr = aiger_is_input( aiger.aig, var ); ptr )
-            return ctx.input_vars.nth( static_cast< int >( ptr - aiger.aig->inputs ) );
-        if ( const auto *ptr = aiger_is_latch( aiger.aig, var ); ptr )
-            return assert( ctx.state_vars_table.contains( var ) ), ctx.state_vars_table.at( var );
-        if ( const auto *ptr = aiger_is_and( aiger.aig, var ); ptr )
-            return ctx.and_vars.nth( static_cast< int >( ptr - aiger.aig->ands ) );
-
-        assert( false && "Unreachable code reached" );
-        std::unreachable();
-    };
-
-    return literal
-    {
-        from_aiger_var( aiger_strip( lit ) ),
-        aiger_sign( lit ) == 1
-    };
-}
-
 // Turn an Aiger declaration
 //   lhs = rhs0 /\ rhs1
 // into a set of clauses using a Tseitin transformation. This must take care
