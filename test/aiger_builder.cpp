@@ -710,7 +710,6 @@ TEST_CASE( "Constant true state variable is removed from the system" )
     REQUIRE( info->error_coi.empty() );
 
     auto ctx = make_context( store, *info );
-    const auto s = literal::separator;
 
     SECTION( "Context is set up correctly" )
     {
