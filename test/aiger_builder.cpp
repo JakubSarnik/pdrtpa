@@ -642,7 +642,7 @@ TEST_CASE( "More complicated flip flop with negated next state function" )
            !x0p, !a3, s,  a3, x0p, s
        },
        .error = { x0, s },
-        .initial_cube = { false }
+       .initial_cube = { false }
     };
 
     check_system( ctx, system );
