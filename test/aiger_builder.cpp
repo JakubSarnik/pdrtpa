@@ -97,6 +97,7 @@ TEST_CASE( "Buffer gate" )
     REQUIRE( info->error_coi.empty() );
 
     auto ctx = make_context( store, *info );
+    const auto input = literal{ ctx.input_vars.nth( 0 ) };
 
     SECTION( "Context is set up correctly" )
     {
@@ -106,8 +107,6 @@ TEST_CASE( "Buffer gate" )
             .next_state_vars = 0,
             .and_vars = 0
         } );
-
-        const auto input = literal{ ctx.input_vars.nth( 0 ) };
 
         REQUIRE( from_aiger_lit( ctx, 2 ) == input );
         REQUIRE( from_aiger_lit( ctx, 3 ) == !input );
@@ -119,7 +118,7 @@ TEST_CASE( "Buffer gate" )
         {
             .init = {},
             .trans = {},
-            .error = { literal{ ctx.input_vars.nth( 0 ) }, literal::separator },
+            .error = { input, literal::separator },
             .initial_cube = {}
         };
 
@@ -144,6 +143,7 @@ TEST_CASE( "Inverter gate" )
     REQUIRE( info->error_coi.empty() );
 
     auto ctx = make_context( store, *info );
+    const auto input = literal{ ctx.input_vars.nth( 0 ) };
 
     SECTION( "Context is set up correctly" )
     {
@@ -153,8 +153,6 @@ TEST_CASE( "Inverter gate" )
                 .next_state_vars = 0,
                 .and_vars = 0
         } );
-
-        const auto input = literal{ ctx.input_vars.nth( 0 ) };
 
         REQUIRE( from_aiger_lit( ctx, 2 ) == input );
         REQUIRE( from_aiger_lit( ctx, 3 ) == !input );
@@ -166,7 +164,7 @@ TEST_CASE( "Inverter gate" )
         {
             .init = {},
             .trans = {},
-            .error = { !literal{ ctx.input_vars.nth( 0 ) }, literal::separator },
+            .error = { !input, literal::separator },
             .initial_cube = {}
         };
 
@@ -193,6 +191,10 @@ TEST_CASE( "And gate" )
     REQUIRE( info->error_coi.empty() );
 
     auto ctx = make_context( store, *info );
+    const auto x = literal{ ctx.input_vars.nth( 0 ) };
+    const auto y = literal{ ctx.input_vars.nth( 1 ) };
+    const auto z = literal{ ctx.and_vars.nth( 0 ) };
+    const auto s = literal::separator;
 
     SECTION( "Context is set up correctly" )
     {
@@ -203,16 +205,12 @@ TEST_CASE( "And gate" )
                 .and_vars = 1
         } );
 
-        const auto in0 = literal{ ctx.input_vars.nth( 0 ) };
-        const auto in1 = literal{ ctx.input_vars.nth( 1 ) };
-        const auto cnj = literal{ ctx.and_vars.nth( 0 ) };
-
-        REQUIRE( from_aiger_lit( ctx, 2 ) == in0 );
-        REQUIRE( from_aiger_lit( ctx, 3 ) == !in0 );
-        REQUIRE( from_aiger_lit( ctx, 4 ) == in1 );
-        REQUIRE( from_aiger_lit( ctx, 5 ) == !in1 );
-        REQUIRE( from_aiger_lit( ctx, 6 ) == cnj );
-        REQUIRE( from_aiger_lit( ctx, 7 ) == !cnj );
+        REQUIRE( from_aiger_lit( ctx, 2 ) == x );
+        REQUIRE( from_aiger_lit( ctx, 3 ) == !x );
+        REQUIRE( from_aiger_lit( ctx, 4 ) == y );
+        REQUIRE( from_aiger_lit( ctx, 5 ) == !y );
+        REQUIRE( from_aiger_lit( ctx, 6 ) == z );
+        REQUIRE( from_aiger_lit( ctx, 7 ) == !z );
     }
 
     SECTION( "The transition system is correct" )
@@ -222,11 +220,6 @@ TEST_CASE( "And gate" )
         // Original formula: z = y /\ x [output z]
         // As implications: (z -> y) /\ (z -> x) /\ (y /\ x -> z)
         // Our formula: (-z \/ y) /\ (-z \/ x) /\ (-y \/ -x \/ z)
-
-        const auto x = literal{ ctx.input_vars.nth( 0 ) };
-        const auto y = literal{ ctx.input_vars.nth( 1 ) };
-        const auto z = literal{ ctx.and_vars.nth( 0 ) };
-        const auto s = literal::separator;
 
         const auto system = expected_system
         {
@@ -259,6 +252,10 @@ TEST_CASE( "Or gate" )
     REQUIRE( info->error_coi.empty() );
 
     auto ctx = make_context( store, *info );
+    const auto x = literal{ ctx.input_vars.nth( 0 ) };
+    const auto y = literal{ ctx.input_vars.nth( 1 ) };
+    const auto z = literal{ ctx.and_vars.nth( 0 ) };
+    const auto s = literal::separator;
 
     SECTION( "Context is set up correctly" )
     {
@@ -269,25 +266,16 @@ TEST_CASE( "Or gate" )
                 .and_vars = 1
         } );
 
-        const auto in0 = literal{ ctx.input_vars.nth( 0 ) };
-        const auto in1 = literal{ ctx.input_vars.nth( 1 ) };
-        const auto cnj = literal{ ctx.and_vars.nth( 0 ) };
-
-        REQUIRE( from_aiger_lit( ctx, 2 ) == in0 );
-        REQUIRE( from_aiger_lit( ctx, 3 ) == !in0 );
-        REQUIRE( from_aiger_lit( ctx, 4 ) == in1 );
-        REQUIRE( from_aiger_lit( ctx, 5 ) == !in1 );
-        REQUIRE( from_aiger_lit( ctx, 6 ) == cnj );
-        REQUIRE( from_aiger_lit( ctx, 7 ) == !cnj );
+        REQUIRE( from_aiger_lit( ctx, 2 ) == x );
+        REQUIRE( from_aiger_lit( ctx, 3 ) == !x );
+        REQUIRE( from_aiger_lit( ctx, 4 ) == y );
+        REQUIRE( from_aiger_lit( ctx, 5 ) == !y );
+        REQUIRE( from_aiger_lit( ctx, 6 ) == z );
+        REQUIRE( from_aiger_lit( ctx, 7 ) == !z );
     }
 
     SECTION( "The transition system is correct" )
     {
-        const auto x = literal{ ctx.input_vars.nth( 0 ) };
-        const auto y = literal{ ctx.input_vars.nth( 1 ) };
-        const auto z = literal{ ctx.and_vars.nth( 0 ) };
-        const auto s = literal::separator;
-
         const auto system = expected_system
         {
             .init = {},
@@ -298,4 +286,364 @@ TEST_CASE( "Or gate" )
 
         check_system( ctx, system );
     }
+}
+
+TEST_CASE( "Constant latch initialized with false" )
+{
+    const auto* const str =
+            "aag 1 0 1 1 0\n"
+            "2 2\n"
+            "2\n";
+
+    auto aig = read_aiger( str );
+    auto store = variable_store{};
+
+    auto info = make_aiger_info( *aig );
+    REQUIRE( info.has_value() );
+    REQUIRE( info->aig == aig.get() );
+    REQUIRE( info->true_literals == std::unordered_set< aiger_literal >{ aiger_true } );
+    REQUIRE( info->error_coi == std::unordered_set< aiger_literal >{ 2 } );
+
+    auto ctx = make_context( store, *info );
+    const auto x = literal{ ctx.state_vars.nth( 0 ) };
+    const auto xp = literal{ ctx.next_state_vars.nth( 0 ) };
+    const auto s = literal::separator;
+
+    SECTION( "Context is set up correctly" )
+    {
+        check_sizes( ctx, {
+                .input_vars = 0,
+                .state_vars = 1,
+                .next_state_vars = 1,
+                .and_vars = 0
+        } );
+
+        REQUIRE( from_aiger_lit( ctx, 2 ) == x );
+        REQUIRE( from_aiger_lit( ctx, 3 ) == !x );
+    }
+
+    SECTION( "The transition system is correct" )
+    {
+        const auto system = expected_system
+        {
+            .init = { !x, s },                 // -x
+            .trans = { !xp, x, s, !x, xp, s }, // x' = x (i.e. (-x' \/ x) /\ (-x \/ x'))
+            .error = { x, s },                 // x
+            .initial_cube = { false }
+        };
+
+        check_system( ctx, system );
+    }
+}
+
+TEST_CASE( "Constant latch initialized with true" )
+{
+    const auto* const str =
+            "aag 1 0 1 1 0\n"
+            "2 2 1\n"
+            "2\n";
+
+    auto aig = read_aiger( str );
+    auto store = variable_store{};
+
+    auto info = make_aiger_info( *aig );
+    REQUIRE( info.has_value() );
+    REQUIRE( info->aig == aig.get() );
+    REQUIRE( info->true_literals == std::unordered_set< aiger_literal >{ aiger_true } );
+    REQUIRE( info->error_coi == std::unordered_set< aiger_literal >{ 2 } );
+
+    auto ctx = make_context( store, *info );
+    const auto x = literal{ ctx.state_vars.nth( 0 ) };
+    const auto xp = literal{ ctx.next_state_vars.nth( 0 ) };
+    const auto s = literal::separator;
+
+    SECTION( "Context is set up correctly" )
+    {
+        check_sizes( ctx, {
+                .input_vars = 0,
+                .state_vars = 1,
+                .next_state_vars = 1,
+                .and_vars = 0
+        } );
+
+        REQUIRE( from_aiger_lit( ctx, 2 ) == x );
+        REQUIRE( from_aiger_lit( ctx, 3 ) == !x );
+    }
+
+    SECTION( "The transition system is correct" )
+    {
+        const auto system = expected_system
+        {
+            .init = { x, s },                  // x
+            .trans = { !xp, x, s, !x, xp, s }, // x' = x (i.e. (-x' \/ x) /\ (-x \/ x'))
+            .error = { x, s },                 // x
+            .initial_cube = { true }
+        };
+
+        check_system( ctx, system );
+    }
+}
+
+TEST_CASE( "Simple flip flop" )
+{
+    const auto* const str =
+            "aag 1 0 1 1 0\n"
+            "2 3\n"
+            "2\n";
+
+    auto aig = read_aiger( str );
+    auto store = variable_store{};
+
+    auto info = make_aiger_info( *aig );
+    REQUIRE( info.has_value() );
+    REQUIRE( info->aig == aig.get() );
+    REQUIRE( info->true_literals == std::unordered_set< aiger_literal >{ aiger_true } );
+    REQUIRE( info->error_coi == std::unordered_set< aiger_literal >{ 2 } );
+
+    auto ctx = make_context( store, *info );
+    const auto x = literal{ ctx.state_vars.nth( 0 ) };
+    const auto xp = literal{ ctx.next_state_vars.nth( 0 ) };
+    const auto s = literal::separator;
+
+    SECTION( "Context is set up correctly" )
+    {
+        check_sizes( ctx, {
+                .input_vars = 0,
+                .state_vars = 1,
+                .next_state_vars = 1,
+                .and_vars = 0
+        } );
+
+        REQUIRE( from_aiger_lit( ctx, 2 ) == x );
+        REQUIRE( from_aiger_lit( ctx, 3 ) == !x );
+    }
+
+    SECTION( "The transition system is correct" )
+    {
+        const auto system = expected_system
+        {
+            .init = { !x, s },                 // -x
+            .trans = { !xp, !x, s, x, xp, s }, // x' = -x (i.e. (-x' \/ -x) /\ (x \/ x'))
+            .error = { x, s },                 // x
+            .initial_cube = { false }
+        };
+
+        check_system( ctx, system );
+    }
+}
+
+TEST_CASE( "Simple flip flop with indeterminate initial state" )
+{
+    const auto* const str =
+            "aag 1 0 1 1 0\n"
+            "2 3 2\n"
+            "2\n";
+
+    auto aig = read_aiger( str );
+    auto store = variable_store{};
+
+    auto info = make_aiger_info( *aig );
+    REQUIRE( info.has_value() );
+    REQUIRE( info->aig == aig.get() );
+    REQUIRE( info->true_literals == std::unordered_set< aiger_literal >{ aiger_true } );
+    REQUIRE( info->error_coi == std::unordered_set< aiger_literal >{ 2 } );
+
+    auto ctx = make_context( store, *info );
+    const auto x = literal{ ctx.state_vars.nth( 0 ) };
+    const auto xp = literal{ ctx.next_state_vars.nth( 0 ) };
+    const auto s = literal::separator;
+
+    SECTION( "Context is set up correctly" )
+    {
+        check_sizes( ctx, {
+                .input_vars = 0,
+                .state_vars = 1,
+                .next_state_vars = 1,
+                .and_vars = 0
+        } );
+
+        REQUIRE( from_aiger_lit( ctx, 2 ) == x );
+        REQUIRE( from_aiger_lit( ctx, 3 ) == !x );
+    }
+
+    SECTION( "The transition system is correct" )
+    {
+        const auto system = expected_system
+        {
+            .init = {},                        // True
+            .trans = { !xp, !x, s, x, xp, s }, // x' = -x (i.e. (-x' \/ -x) /\ (x \/ x'))
+            .error = { x, s },                 // x
+            .initial_cube = {}
+        };
+
+        check_system( ctx, system );
+    }
+}
+
+TEST_CASE( "More complicated flip flop" )
+{
+    const auto* const str =
+            "aag 7 2 1 1 4\n"
+            "2\n"
+            "4\n"
+            "6 14\n"
+            "6\n"
+            "8 6 2\n"
+            "10 7 3\n"
+            "12 11 9\n"
+            "14 12 4\n";
+
+    auto aig = read_aiger( str );
+    auto store = variable_store{};
+
+    auto info = make_aiger_info( *aig );
+    REQUIRE( info.has_value() );
+    REQUIRE( info->aig == aig.get() );
+    REQUIRE( info->true_literals == std::unordered_set< aiger_literal >{ aiger_true } );
+    REQUIRE( info->error_coi == std::unordered_set< aiger_literal >{ 6 } );
+
+    auto ctx = make_context( store, *info );
+    const auto y0 = literal{ ctx.input_vars.nth( 0 ) };
+    const auto y1 = literal{ ctx.input_vars.nth( 1 ) };
+    const auto x0 = literal{ ctx.state_vars.nth( 0 ) };
+    const auto x0p = literal{ ctx.next_state_vars.nth( 0 ) };
+    const auto a0 = literal{ ctx.and_vars.nth( 0 ) };
+    const auto a1 = literal{ ctx.and_vars.nth( 1 ) };
+    const auto a2 = literal{ ctx.and_vars.nth( 2 ) };
+    const auto a3 = literal{ ctx.and_vars.nth( 3 ) };
+    const auto s = literal::separator;
+
+    SECTION( "Context is set up correctly" )
+    {
+        check_sizes( ctx, {
+                .input_vars = 2,
+                .state_vars = 1,
+                .next_state_vars = 1,
+                .and_vars = 4
+        } );
+
+        REQUIRE( from_aiger_lit( ctx, 2 ) == y0 );
+        REQUIRE( from_aiger_lit( ctx, 3 ) == !y0 );
+        REQUIRE( from_aiger_lit( ctx, 4 ) == y1 );
+        REQUIRE( from_aiger_lit( ctx, 5 ) == !y1 );
+
+        REQUIRE( from_aiger_lit( ctx, 6 ) == x0 );
+        REQUIRE( from_aiger_lit( ctx, 7 ) == !x0 );
+
+        REQUIRE( from_aiger_lit( ctx, 8 ) == a0 );
+        REQUIRE( from_aiger_lit( ctx, 9 ) == !a0 );
+        REQUIRE( from_aiger_lit( ctx, 10 ) == a1 );
+        REQUIRE( from_aiger_lit( ctx, 11 ) == !a1 );
+        REQUIRE( from_aiger_lit( ctx, 12 ) == a2 );
+        REQUIRE( from_aiger_lit( ctx, 13 ) == !a2 );
+        REQUIRE( from_aiger_lit( ctx, 14 ) == a3 );
+        REQUIRE( from_aiger_lit( ctx, 15 ) == !a3 );
+    }
+
+    SECTION( "The transition system is correct" )
+    {
+        // a3  =  a2  /\  y1
+        // a2  = -a1  /\ -a0
+        // a1  = -x0  /\ -y0
+        // a0  =  x0  /\  y0
+        // x'0 =  a3
+
+        // (a3  ->  a2) /\ (a3 ->  y1) /\ ( a2 /\  y1 -> a3) /\
+        // (a2  -> -a1) /\ (a2 -> -a0) /\ (-a1 /\ -a0 -> a2) /\
+        // (a1  -> -x0) /\ (a1 -> -y0) /\ (-x0 /\ -y0 -> a1) /\
+        // (a0  ->  x0) /\ (a0 ->  y0) /\ ( x0 /\  y0 -> a0) /\
+        // (x'0 ->  a3) /\ (a3 -> x'0)
+
+        // (-a3  \/  a2) /\ (-a3 \/  y1) /\ (-a2 \/ -y1 \/ a3)
+        // (-a2  \/ -a1) /\ (-a2 \/ -a0) /\ ( a1 \/  a0 \/ a2)
+        // (-a1  \/ -x0) /\ (-a1 \/ -y0) /\ ( x0 \/  y0 \/ a1)
+        // (-a0  \/  x0) /\ (-a0 \/  y0) /\ (-x0 \/ -y0 \/ a0)
+        // (-x'0 \/  a3) /\ (-a3 \/ x'0)
+
+        const auto system = expected_system
+        {
+            .init = { !x0, s },
+            .trans =
+            {
+                 !a3,  a2, s, !a3,  y1, s, !a2, !y1, a3, s,
+                 !a2, !a1, s, !a2, !a0, s,  a1,  a0, a2, s,
+                 !a1, !x0, s, !a1, !y0, s,  x0,  y0, a1, s,
+                 !a0,  x0, s, !a0,  y0, s, !x0, !y0, a0, s,
+                !x0p,  a3, s, !a3, x0p, s
+            },
+            .error = { x0, s },
+            .initial_cube = { false }
+        };
+
+        check_system( ctx, system );
+    }
+}
+
+TEST_CASE( "More complicated flip flop with negated next state function" )
+{
+    const auto* const str =
+            "aag 7 2 1 1 4\n"
+            "2\n"
+            "4\n"
+            "6 15\n"
+            "6\n"
+            "8 6 2\n"
+            "10 7 3\n"
+            "12 11 9\n"
+            "14 12 4\n";
+
+    auto aig = read_aiger( str );
+    auto store = variable_store{};
+
+    auto info = make_aiger_info( *aig );
+    REQUIRE( info.has_value() );
+    REQUIRE( info->aig == aig.get() );
+    REQUIRE( info->true_literals == std::unordered_set< aiger_literal >{ aiger_true } );
+    REQUIRE( info->error_coi == std::unordered_set< aiger_literal >{ 6 } );
+
+    auto ctx = make_context( store, *info );
+    const auto y0 = literal{ ctx.input_vars.nth( 0 ) };
+    const auto y1 = literal{ ctx.input_vars.nth( 1 ) };
+    const auto x0 = literal{ ctx.state_vars.nth( 0 ) };
+    const auto x0p = literal{ ctx.next_state_vars.nth( 0 ) };
+    const auto a0 = literal{ ctx.and_vars.nth( 0 ) };
+    const auto a1 = literal{ ctx.and_vars.nth( 1 ) };
+    const auto a2 = literal{ ctx.and_vars.nth( 2 ) };
+    const auto a3 = literal{ ctx.and_vars.nth( 3 ) };
+    const auto s = literal::separator;
+
+    // a3  =  a2  /\  y1
+    // a2  = -a1  /\ -a0
+    // a1  = -x0  /\ -y0
+    // a0  =  x0  /\  y0
+    // x'0 = -a3
+
+    // (a3  ->  a2) /\ ( a3 ->  y1) /\ ( a2 /\  y1 -> a3) /\
+    // (a2  -> -a1) /\ ( a2 -> -a0) /\ (-a1 /\ -a0 -> a2) /\
+    // (a1  -> -x0) /\ ( a1 -> -y0) /\ (-x0 /\ -y0 -> a1) /\
+    // (a0  ->  x0) /\ ( a0 ->  y0) /\ ( x0 /\  y0 -> a0) /\
+    // (x'0 -> -a3) /\ (-a3 -> x'0)
+
+    // (-a3  \/  a2) /\ (-a3 \/  y1) /\ (-a2 \/ -y1 \/ a3)
+    // (-a2  \/ -a1) /\ (-a2 \/ -a0) /\ ( a1 \/  a0 \/ a2)
+    // (-a1  \/ -x0) /\ (-a1 \/ -y0) /\ ( x0 \/  y0 \/ a1)
+    // (-a0  \/  x0) /\ (-a0 \/  y0) /\ (-x0 \/ -y0 \/ a0)
+    // (-x'0 \/ -a3) /\ ( a3 \/ x'0)
+
+    const auto system = expected_system
+    {
+        .init = { !x0, s },
+        .trans =
+        {
+            !a3,  a2, s, !a3,  y1, s, !a2, !y1, a3, s,
+            !a2, !a1, s, !a2, !a0, s,  a1,  a0, a2, s,
+            !a1, !x0, s, !a1, !y0, s,  x0,  y0, a1, s,
+            !a0,  x0, s, !a0,  y0, s, !x0, !y0, a0, s,
+           !x0p, !a3, s,  a3, x0p, s
+       },
+       .error = { x0, s },
+        .initial_cube = { false }
+    };
+
+    check_system( ctx, system );
 }
