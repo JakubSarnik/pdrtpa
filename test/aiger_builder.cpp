@@ -647,3 +647,187 @@ TEST_CASE( "More complicated flip flop with negated next state function" )
 
     check_system( ctx, system );
 }
+
+TEST_CASE( "Constant false state variable is removed from the system" )
+{
+    const auto* const str =
+            "aag 2 0 1 1 1\n"
+            "2 4\n"
+            "2\n"
+            "4 2 0\n";
+
+    auto aig = read_aiger( str );
+    auto store = variable_store{};
+
+    auto info = make_aiger_info( *aig );
+    REQUIRE( info.has_value() );
+    REQUIRE( info->aig == aig.get() );
+    REQUIRE( info->true_literals == std::unordered_set< aiger_literal >{ aiger_true, 3, 5 } );
+    REQUIRE( info->error_coi.empty() );
+
+    auto ctx = make_context( store, *info );
+    const auto s = literal::separator;
+
+    SECTION( "Context is set up correctly" )
+    {
+        check_sizes( ctx, {
+                .input_vars = 0,
+                .state_vars = 0,
+                .next_state_vars = 0,
+                .and_vars = 1
+        } );
+    }
+
+    SECTION( "The transition system is correct" )
+    {
+        const auto system = expected_system
+        {
+            .init = {},     // True
+            .trans = {},    // True
+            .error = { s }, // False
+            .initial_cube = { false }
+        };
+
+        check_system( ctx, system );
+    }
+}
+
+TEST_CASE( "Constant true state variable is removed from the system" )
+{
+    const auto* const str =
+            "aag 2 0 1 1 1\n"
+            "2 5 1\n"
+            "2\n"
+            "4 2 0\n";
+
+    auto aig = read_aiger( str );
+    auto store = variable_store{};
+
+    auto info = make_aiger_info( *aig );
+    REQUIRE( info.has_value() );
+    REQUIRE( info->aig == aig.get() );
+    REQUIRE( info->true_literals == std::unordered_set< aiger_literal >{ aiger_true, 2, 5 } );
+    REQUIRE( info->error_coi.empty() );
+
+    auto ctx = make_context( store, *info );
+    const auto s = literal::separator;
+
+    SECTION( "Context is set up correctly" )
+    {
+        check_sizes( ctx, {
+                .input_vars = 0,
+                .state_vars = 0,
+                .next_state_vars = 0,
+                .and_vars = 1
+        } );
+    }
+
+    SECTION( "The transition system is correct" )
+    {
+        const auto system = expected_system
+        {
+            .init = {},  // True
+            .trans = {}, // True
+            .error = {}, // True
+            .initial_cube = { true }
+        };
+
+        check_system( ctx, system );
+    }
+}
+
+TEST_CASE( "Variable with constant next state but differing initial state is kept" )
+{
+    const auto* const str =
+            "aag 2 0 1 1 1\n"
+            "2 5 0\n"
+            "2\n"
+            "4 2 0\n";
+
+    auto aig = read_aiger( str );
+    auto store = variable_store{};
+
+    auto info = make_aiger_info( *aig );
+    REQUIRE( info.has_value() );
+    REQUIRE( info->aig == aig.get() );
+    REQUIRE( info->true_literals == std::unordered_set< aiger_literal >{ aiger_true, 5 } );
+    REQUIRE( info->error_coi == std::unordered_set< aiger_literal >{ 2 } );
+
+    auto ctx = make_context( store, *info );
+    const auto x = literal{ ctx.state_vars.nth( 0 ) };
+    const auto xp = literal{ ctx.next_state_vars.nth( 0 ) };
+    const auto s = literal::separator;
+
+    SECTION( "Context is set up correctly" )
+    {
+        check_sizes( ctx, {
+                .input_vars = 0,
+                .state_vars = 1,
+                .next_state_vars = 1,
+                .and_vars = 1
+        } );
+    }
+
+    SECTION( "The transition system is correct" )
+    {
+        const auto system = expected_system
+        {
+            .init = { !x, s },  // !x
+            .trans = { xp, s }, // x' = True
+            .error = { x, s },  // x
+            .initial_cube = { false }
+        };
+
+        check_system( ctx, system );
+    }
+}
+
+TEST_CASE( "Variable that cannot influence the error is removed" )
+{
+    const auto* const str =
+            "aag 3 0 2 1 1\n"
+            "2 3\n"
+            "4 6 1\n"
+            "2\n"
+            "6 2 5\n";
+
+    auto aig = read_aiger( str );
+    auto store = variable_store{};
+
+    auto info = make_aiger_info( *aig );
+    REQUIRE( info.has_value() );
+    REQUIRE( info->aig == aig.get() );
+    REQUIRE( info->true_literals == std::unordered_set< aiger_literal >{ aiger_true } );
+    REQUIRE( info->error_coi == std::unordered_set< aiger_literal >{ 2 } );
+
+    auto ctx = make_context( store, *info );
+    const auto x = literal{ ctx.state_vars.nth( 0 ) };
+    const auto xp = literal{ ctx.next_state_vars.nth( 0 ) };
+    const auto s = literal::separator;
+
+    SECTION( "Context is set up correctly" )
+    {
+        check_sizes( ctx, {
+                .input_vars = 0,
+                .state_vars = 1,
+                .next_state_vars = 1,
+                .and_vars = 1
+        } );
+
+        REQUIRE( from_aiger_lit( ctx, 2 ) == x );
+        REQUIRE( from_aiger_lit( ctx, 3 ) == !x );
+    }
+
+    SECTION( "The transition system is correct" )
+    {
+        const auto system = expected_system
+        {
+            .init = { !x, s },                 // -x
+            .trans = { !xp, !x, s, x, xp, s }, // x' = -x (i.e. (-x' \/ -x) /\ (x \/ x'))
+            .error = { x, s },                 // x
+            .initial_cube = { false, true }
+        };
+
+        check_system( ctx, system );
+    }
+}
