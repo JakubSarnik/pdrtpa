@@ -85,4 +85,11 @@ int main( int argc, char** argv )
     logger::log_line_loud( "OK" );
     logger::log_line_debug( "\tAiger latches:   {}", aig->num_latches );
     logger::log_line_debug( "\tState variables: {}", system->state_vars().size() );
+
+    // TODO: At this point, we could simplify the three formulae, each in its
+    //       own solver and using cadical's freeze on state, next state and
+    //       input vars, then calling simplify and finally traversing the
+    //       clauses again (ClauseIterator) to get the simplified formulae. Is
+    //       this good or not? Investigate once the model checker itself is
+    //       implemented.
 }
