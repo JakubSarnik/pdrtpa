@@ -3,7 +3,7 @@ project(pdrtpa)
 
 include(ExternalProject)
 
-set(CMAKE_CXX_STANDARD 26)
+set(CMAKE_CXX_STANDARD 23)
 
 add_library(aiger STATIC dep/aiger/aiger.c)
 set(AIGER_HEADER_DIR "${CMAKE_SOURCE_DIR}/dep/aiger")
