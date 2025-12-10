@@ -42,7 +42,7 @@ class transition_system
 public:
     transition_system( variable_range input_vars, variable_range state_vars, variable_range next_state_vars,
                        variable_range aux_vars, std::vector< bool > init_cube, cnf_formula init,
-                       cnf_formula trans, cnf_formula error )
+                       cnf_formula trans, cnf_formula error ) noexcept
             : _input_vars{ input_vars }, _state_vars{ state_vars }, _next_state_vars{ next_state_vars },
               _aux_vars{ aux_vars }, _initial_cube( std::move( init_cube ) ), _init{ std::move( init ) },
               _trans{ std::move( trans ) }, _error{ std::move( error ) }

@@ -1,6 +1,9 @@
 #include "aiger_builder.hpp"
 #include <limits>
 
+// NOLINTBEGIN(cppcoreguidelines-pro-bounds-pointer-arithmetic)
+// Pointer arithmetic is unavoidable when working with the C API of Aiger.
+
 namespace builder
 {
 
@@ -396,3 +399,5 @@ std::expected< transition_system, std::string > build_from_aiger( variable_store
 }
 
 }
+
+// NOLINTEND(cppcoreguidelines-pro-bounds-pointer-arithmetic)

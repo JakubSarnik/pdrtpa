@@ -17,7 +17,7 @@ class variable
 
     int _id;
 
-    explicit variable( int id ) : _id{ id }
+    explicit variable( int id ) noexcept : _id{ id }
     {
         assert( id > 0 );
     }
@@ -36,7 +36,7 @@ class variable_range
     int _end;
 
     // Construct a range representing variables in range [begin, end).
-    variable_range( int begin, int end ) : _begin{ begin }, _end{ end }
+    variable_range( int begin, int end ) noexcept : _begin{ begin }, _end{ end }
     {
         assert( begin > 0 );
         assert( begin <= end );
@@ -131,10 +131,10 @@ class literal
 {
     int _value;
 
-    explicit literal( int value ) : _value{ value } {}
+    explicit literal( int value ) noexcept : _value{ value } {}
 
 public:
-    explicit literal( variable var, bool positive = true ) : _value{ var.id() }
+    explicit literal( variable var, bool positive = true ) noexcept : _value{ var.id() }
     {
         if ( !positive )
             _value *= -1;
@@ -292,7 +292,7 @@ class cube
 public:
     cube() = default;
 
-    explicit cube( std::vector< literal > literals ) : _literals{ std::move( literals ) }
+    explicit cube( std::vector< literal > literals ) noexcept : _literals{ std::move( literals ) }
     {
         std::ranges::sort( _literals, cube_literal_lt );
     };
@@ -348,7 +348,7 @@ public:
     [[nodiscard]] std::string to_string() const
     {
         auto res = std::string{};
-        auto sep = "";
+        const auto* sep = "";
 
         for ( const auto lit : _literals )
         {
