@@ -1,11 +1,14 @@
 #include "aiger.h"
 #include "logic.hpp"
+#include "transition_system.hpp"
 #include "logger.hpp"
 #include "aiger_builder.hpp"
+#include "verifier.hpp"
 #include <print>
 #include <string>
 #include <optional>
 #include <memory>
+#include <concepts>
 
 namespace
 {
@@ -18,6 +21,40 @@ using aiger_ptr = std::unique_ptr< aiger, decltype( &aiger_reset ) >;
 aiger_ptr make_aiger()
 {
     return { aiger_init(), &aiger_reset };
+}
+
+std::string format_witness( const transition_system& sys, const verifier::result_t& counterexample )
+{
+    auto row = []< typename T >( const std::vector< T >& literals )
+    {
+        auto res = std::string{};
+
+        for ( const auto lit : literals )
+        {
+            if constexpr ( std::same_as< T, literal > )
+                res += lit.positive() ? '1' : '0';
+            else
+                res += lit ? '1' : '0';
+        }
+
+        res += "\n";
+
+        return res;
+    };
+
+    if ( !counterexample.has_value() )
+        return "0\nb0\n.\n";
+
+    auto witness = std::string( "1\nb0\n" );
+
+    witness += row( sys.initial_cube() );
+
+    for ( const auto& in : *counterexample )
+        witness += row( in );
+
+    witness += ".\n";
+
+    return witness;
 }
 
 }
@@ -97,4 +134,18 @@ int main( int argc, char** argv ) // NOLINT: Don't care about bad_alloc's here.
     //       clauses again (ClauseIterator) to get the simplified formulae. Is
     //       this good or not? Investigate once the model checker itself is
     //       implemented.
+
+    logger::log_line_loud( "Running..." );
+    logger::log_debug( "\n" );
+
+    auto engine = verifier{};
+    const auto result = engine.run( *system );
+
+    logger::log_debug( "\n" );
+    logger::log_line_loud( "Finished" );
+    logger::log_line_loud( "Printing the witness to stdout...\n" );
+
+    std::print( "{}", format_witness( *system, result ) );
+
+    return 0;
 }
