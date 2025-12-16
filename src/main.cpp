@@ -138,7 +138,7 @@ int main( int argc, char** argv ) // NOLINT: Don't care about bad_alloc's here.
     logger::log_line_loud( "Running..." );
     logger::log_debug( "\n" );
 
-    auto engine = verifier{};
+    auto engine = verifier{ store };
     const auto result = engine.run( *system );
 
     logger::log_debug( "\n" );
