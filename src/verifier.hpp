@@ -74,17 +74,49 @@ public:
 private:
     variable_store* _store;
 
-    solver _error_solver;
-    solver _consecution_solver;
+    // We need to solve the following types of formulae:
+    //   1. I(X) /\ TF[i](X, X') /\ ~P' in the main loop (blocking phase)
+    //   2. TF[i](X, X°) /\ TF[i](X°, X') /\ s /\ t' in the
+    //     - main loop (propagation)
+    //     - obligation solver
+    // We have a few special cases of 1 before the main loop:
+    //   1a. I(X) /\ ~P(X)
+    //   1b. I(X) /\ T(X, Y, X') /\ ~P(X')
+    // And for proof obligations at the first level, the formula 2 refers
+    // to the frame TF[0] = id(X, X') \/ T(X, Y, X'):
+    //   2a. id(X, X°) /\ id(X°, X') /\ s /\ t' ~> s = t
+    //   2b. id(X, X°) /\ T(X°, Y, X') /\ s /\ t' ~>
+    //       s /\ T(X, Y, X') /\ t'
+    //   2c. T(X, Y, X°) /\ id(X°, X') /\ s /\ t' ~>
+    //       s /\ T(X, Y, X°) /\ t° ~>
+    //       s /\ T(X, Y, X') /\ t' (i.e. same as 2b)
+    //   2d. T(X, Y1, X°) /\ T(X°, Y2, X') /\ s /\ t'
+    //       [Note the two different variants of Y!]
+    // And finally the proof obligation base case:
+    //   3a. s /\ id(X, X') /\ t' ~> s = t
+    //   3b. s /\ T(X, Y, X') /\ t'
+
+    solver _error_solver; // Solves I(X) /\ TF[i](X, X') /\ ~P'
+    solver _consecution_solver; // Solves TF[i](X, X°) /\ TF[i](X°, X') /\ s /\ t'
 
     const transition_system* _system = nullptr;
     cube _init_cube;
+
+    variable_range _middle_state_vars; // X°
+    variable_range _left_input_vars;   // Y1 = Y
+    variable_range _right_input_vars;  // Y2
+    variable_range _right_aux_vars;    // Needed to separate the two instances of T
+
+    cnf_formula _left_trans; // T(X, Y1, X°)
+    cnf_formula _right_trans; // T(X°, Y2, X')
 
     using cubes = std::vector< cube >;
 
     std::vector< cubes > _trace_blocked_cubes;
     std::vector< literal > _trace_activators;
-
+    literal _trans_activator; // Activates T(X, Y, X') in _consecution_solver
+    literal _left_trans_activator; // Activates T(X, Y1, X°) in _consecution_solver
+    literal _right_trans_activator; // Activates T(X°, Y2, X') in _consecution_solver
     cex_pool _cexes;
 
     [[nodiscard]] int depth() const
@@ -107,11 +139,54 @@ private:
         return std::span{ _trace_activators }.subspan( level );
     }
 
+    // T(X, Y, X') -> T(X, Y, X°)
+    [[nodiscard]] literal make_left_trans( literal lit ) const
+    {
+        const auto [ type, pos ] = _system->get_var_info( lit.var() );
+
+        if ( type == var_type::next_state )
+            return lit.substitute( _middle_state_vars.nth( pos ) );
+        else
+            return lit;
+    }
+
+    // T(X, Y, X') -> T(X°, Y2, X') (and right aux vars)
+    [[nodiscard]] literal make_right_trans( literal lit ) const
+    {
+        const auto [ type, pos ] = _system->get_var_info( lit.var() );
+
+        switch ( type )
+        {
+            case var_type::state:
+                return lit.substitute( _middle_state_vars.nth( pos ) );
+            case var_type::input:
+                return lit.substitute( _right_input_vars.nth( pos ) );
+            case var_type::auxiliary:
+                return lit.substitute( _right_aux_vars.nth( pos ) );
+            default:
+                return lit;
+        }
+    }
+
     void initialize();
     result_t check();
+    result_t check_trivial_cases();
 
 public:
-    explicit verifier( variable_store& store ) noexcept : _store( &store ) {}
+    explicit verifier( variable_store& store, const transition_system& system ) :
+        _store{ &store },
+        _system{ &system },
+        _init_cube{ system.init().as_cube() },
+        _middle_state_vars{ store.make_range( system.state_vars().size() ) },
+        _left_input_vars{ system.input_vars() },
+        _right_input_vars( store.make_range( system.input_vars().size() ) ),
+        _right_aux_vars( store.make_range( system.aux_vars().size() ) ),
+        _left_trans{ system.trans().map( [ & ]( literal l ){ return make_left_trans( l ); } ) },
+        _right_trans{ system.trans().map( [ & ]( literal l ){ return make_right_trans( l ); } ) },
+        _trans_activator{ store.make() },
+        _left_trans_activator{ store.make() },
+        _right_trans_activator{ store.make() }
+    {}
 
     verifier( const verifier& ) = delete;
     verifier& operator=( const verifier& ) = delete;
@@ -121,5 +196,5 @@ public:
 
     ~verifier() = default;
 
-    [[nodiscard]] result_t run( const transition_system& system );
+    [[nodiscard]] result_t run();
 };
