@@ -11,7 +11,7 @@ using cex_handle = std::size_t;
 struct cex_entry
 {
     cube state_vars;
-    cube input_vars; // Empty if internal node or equality leaf
+    std::optional< cube > input_vars; // Nullopt if internal node or equality leaf
     cex_handle left = std::numeric_limits< cex_handle >::max();
     cex_handle right = std::numeric_limits< cex_handle >::max();
 
@@ -29,7 +29,7 @@ class cex_pool
 
 public:
     // Beware that the handle is invalidated after the next call to clear!
-    [[nodiscard]] cex_handle make( cube state_vars, cube input_vars = {} )
+    [[nodiscard]] cex_handle make( cube state_vars, std::optional< cube > input_vars )
     {
         _entries.emplace_back( std::move( state_vars ), std::move( input_vars ) );
         return _entries.size() - 1;
