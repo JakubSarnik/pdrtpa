@@ -75,7 +75,7 @@ private:
     variable_store* _store;
 
     // We need to solve the following types of formulae:
-    //   1. I(X) /\ TF[i](X, X') /\ ~P' in the main loop (blocking phase)
+    //   1. I(X) /\ TF[i](X, X') /\ ~P(X') in the main loop (blocking phase)
     //   2. TF[i](X, X°) /\ TF[i](X°, X') /\ s /\ t' in the
     //     - main loop (propagation)
     //     - obligation solver

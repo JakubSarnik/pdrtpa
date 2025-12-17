@@ -1,4 +1,5 @@
 #include "verifier.hpp"
+#include "logger.hpp"
 
 auto verifier::run() -> result_t
 {
@@ -35,6 +36,9 @@ void verifier::initialize()
 
 auto verifier::check() -> result_t
 {
+    if ( auto res = check_trivial_cases(); res.has_value() )
+        return res;
+
     // TODO
     return {};
 }
@@ -42,6 +46,54 @@ auto verifier::check() -> result_t
 // Check that there are no counterexamples of size 0, resp. 1
 auto verifier::check_trivial_cases() -> result_t
 {
-    // TODO
+    logger::log_line_debug("Checking I(X) ∧ E(X, Y)");
+
+    {
+        auto slv = solver{};
+
+        slv.assert_formula( _system->init() );
+        slv.assert_formula( _system->error() );
+
+        if ( slv.query().is_sat() )
+        {
+            return std::vector< std::vector< literal > >{ slv.get_model( _system->input_vars() ) };
+        }
+    }
+
+    logger::log_line_debug("Checking I(X) ∧ T(X, Y₁, X') ∧ E(X', Y₂)");
+
+    {
+        // E(X', Y2)
+        const auto shifted_error = _system->error().map( [ & ]( literal lit )
+        {
+            const auto [ type, pos ] = _system->get_var_info( lit.var() );
+
+            switch ( type )
+            {
+                case var_type::state:
+                    return _system->prime( lit );
+                case var_type::input:
+                    return lit.substitute( _right_input_vars.nth( pos ) );
+                default:
+                    return lit;
+            }
+        } );
+
+        auto slv = solver{};
+
+        slv.assert_formula( _system->init() );
+        slv.assert_formula( _system->trans() );
+        slv.assert_formula( shifted_error );
+
+        if ( slv.query().is_sat() )
+        {
+            return std::vector
+            {
+                slv.get_model( _left_input_vars ),
+                slv.get_model( _right_input_vars )
+            };
+        }
+    }
+
     return {};
 }
