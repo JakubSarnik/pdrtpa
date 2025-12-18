@@ -1,5 +1,6 @@
 #include "verifier.hpp"
 #include "logger.hpp"
+#include <functional>
 
 auto verifier::run() -> result_t
 {
@@ -39,8 +40,27 @@ auto verifier::check() -> result_t
     if ( auto res = check_trivial_cases(); res.has_value() )
         return res;
 
-    // TODO
-    return {};
+    logger::log_line_debug( "Beginning main loop" );
+
+    push_frame();
+
+    while ( true )
+    {
+        if ( const auto cex = get_error_cex(); cex.has_value() )
+        {
+            if ( const auto trace = solve_obligation( { *cex, depth() } ); trace.has_value() )
+                return trace;
+        }
+        else
+        {
+            push_frame();
+
+            if ( propagate() )
+                return {};
+        }
+
+        _cexes.clear();
+    }
 }
 
 // Check that there are no counterexamples of size 0, resp. 1
@@ -96,4 +116,64 @@ auto verifier::check_trivial_cases() -> result_t
     }
 
     return {};
+}
+
+// Make a new proof obligation representing a model of
+// I(X) /\ TF[i](X, X') /\ E(X', Y), where i >= 1
+std::optional< cex_handle > verifier::get_error_cex()
+{
+    assert( depth() >= 1 );
+
+    if ( _error_solver.query()
+        .assume( activators_from( depth() ) )
+        .is_sat() )
+    {
+        return _cexes.make( cube{ _error_solver.get_model( _system->state_vars() ) },
+                               cube{ _error_solver.get_model( _system->input_vars() ) } );
+    }
+
+    return {};
+}
+
+auto verifier::solve_obligation( const proof_obligation& starting_po ) -> result_t
+{
+    // TODO
+}
+
+std::vector< std::vector< literal > > verifier::build_counterexample( cex_handle root )
+{
+    auto inputs = std::vector< std::vector< literal > >{};
+
+    std::function< void( cex_handle ) > visit = [ & ]( cex_handle handle )
+    {
+        if ( !_cexes.is_valid( handle ) )
+            return;
+
+        const auto cex = _cexes.get( handle );
+
+        visit( cex.left );
+        visit( cex.right );
+
+        if ( cex.input_vars.has_value() )
+        {
+            auto row = std::vector< literal >{};
+            row.reserve( _system->input_vars().size() );
+
+            // If a variable doesn't appear in any literal, its value is not
+            // important, so we might as well just make it false.
+            for ( const auto in : _system->input_vars() )
+                row.push_back( cex.input_vars->find( in ).value_or( literal{ in, false } ) );
+
+            inputs.emplace_back( std::move( row ) );
+        }
+    };
+
+    visit( root );
+
+    return inputs;
+}
+
+bool verifier::propagate()
+{
+    // TODO
 }

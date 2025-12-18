@@ -35,6 +35,12 @@ public:
         return _entries.size() - 1;
     }
 
+    [[nodiscard]] bool is_valid( cex_handle handle ) const
+    {
+        assert( handle == std::numeric_limits< cex_handle >::max() || handle < _entries.size() );
+        return handle != std::numeric_limits< cex_handle >::max();
+    }
+
     [[nodiscard]] cex_entry& get( cex_handle handle )
     {
         assert( handle < _entries.size() );
@@ -171,6 +177,12 @@ private:
     void initialize();
     result_t check();
     result_t check_trivial_cases();
+
+    std::optional< cex_handle > get_error_cex();
+    result_t solve_obligation( const proof_obligation& starting_po );
+    std::vector< std::vector< literal > > build_counterexample( cex_handle root );
+
+    bool propagate();
 
 public:
     explicit verifier( variable_store& store, const transition_system& system ) :
