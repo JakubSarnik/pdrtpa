@@ -14,12 +14,7 @@ struct cex_entry
     std::optional< cube > input_vars; // Nullopt if internal node or equality leaf
     cex_handle left = std::numeric_limits< cex_handle >::max();
     cex_handle right = std::numeric_limits< cex_handle >::max();
-
-    [[nodiscard]] bool is_leaf() const
-    {
-        return left == std::numeric_limits< cex_handle >::max() &&
-            right == std::numeric_limits< cex_handle >::max();
-    }
+    // TODO: Rewrite left and right to use optional?
 };
 
 // TODO: Make this safer and/or more efficient?
