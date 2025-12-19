@@ -144,12 +144,12 @@ std::vector< std::vector< literal > > verifier::build_counterexample( cex_handle
 {
     auto inputs = std::vector< std::vector< literal > >{};
 
-    std::function< void( cex_handle ) > visit = [ & ]( cex_handle handle )
+    std::function< void( std::optional< cex_handle > ) > visit = [ & ]( std::optional< cex_handle > handle )
     {
-        if ( !_cexes.is_valid( handle ) )
+        if ( !handle.has_value() )
             return;
 
-        const auto cex = _cexes.get( handle );
+        const auto cex = _cexes.get( *handle );
 
         visit( cex.left );
         visit( cex.right );

@@ -11,10 +11,9 @@ using cex_handle = std::size_t;
 struct cex_entry
 {
     cube state_vars;
-    std::optional< cube > input_vars; // Nullopt if internal node or equality leaf
-    cex_handle left = std::numeric_limits< cex_handle >::max();
-    cex_handle right = std::numeric_limits< cex_handle >::max();
-    // TODO: Rewrite left and right to use optional?
+    std::optional< cube > input_vars;
+    std::optional< cex_handle > left;
+    std::optional< cex_handle > right;
 };
 
 // TODO: Make this safer and/or more efficient?
@@ -28,12 +27,6 @@ public:
     {
         _entries.emplace_back( std::move( state_vars ), std::move( input_vars ) );
         return _entries.size() - 1;
-    }
-
-    [[nodiscard]] bool is_valid( cex_handle handle ) const
-    {
-        assert( handle == std::numeric_limits< cex_handle >::max() || handle < _entries.size() );
-        return handle != std::numeric_limits< cex_handle >::max();
     }
 
     [[nodiscard]] cex_entry& get( cex_handle handle )
