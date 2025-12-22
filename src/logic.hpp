@@ -300,6 +300,7 @@ public:
     friend auto operator<=>( const cube&, const cube& ) = default;
 
     [[nodiscard]] const std::vector< literal >& literals() const { return _literals; }
+    [[nodiscard]] std::vector< literal >&& literals() && { return std::move( _literals ); }
 
     // Returns true if this syntactically subsumes that, i.e. if literals in
     // this form a subset of literals in that. Note that c.subsumes( d ) = true
