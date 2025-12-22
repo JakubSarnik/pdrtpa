@@ -3,6 +3,7 @@
 #include "logic.hpp"
 #include "transition_system.hpp"
 #include "solver.hpp"
+#include <concepts>
 #include <vector>
 #include <optional>
 
@@ -10,7 +11,8 @@ using cex_handle = std::size_t;
 
 struct cex_entry
 {
-    cube state_vars;
+    cube s_state_vars;
+    cube t_state_vars; // Unprimed!
     std::optional< cube > input_vars;
     std::optional< cex_handle > left;
     std::optional< cex_handle > right;
@@ -23,9 +25,9 @@ class cex_pool
 
 public:
     // Beware that the handle is invalidated after the next call to clear!
-    [[nodiscard]] cex_handle make( cube state_vars, std::optional< cube > input_vars )
+    [[nodiscard]] cex_handle make( cube s_state_vars, cube t_state_vars, std::optional< cube > input_vars )
     {
-        _entries.emplace_back( std::move( state_vars ), std::move( input_vars ) );
+        _entries.emplace_back( std::move( s_state_vars ), std::move( t_state_vars ), std::move( input_vars ) );
         return _entries.size() - 1;
     }
 
@@ -162,12 +164,108 @@ private:
         }
     }
 
+    // TODO: All this stuff should be done by the transition system.
+    //       Consider moving all the left/right input vars, middle state vars
+    //       etc. machinery there.
+
+    template< std::regular_invocable< literal, var_type, int > F >
+    [[nodiscard]] cube shift_cube( cube c, const F& f ) const
+    {
+        auto lits = std::move( c ).literals();
+
+        for ( auto& lit : lits )
+        {
+            const auto [ type, pos ] = _system->get_var_info( lit.var() );
+            lit = f( lit, type, pos );
+        }
+
+        return cube{ std::move( lits ) };
+    }
+
+    [[nodiscard]] cube prime( cube c ) const
+    {
+        return shift_cube( std::move( c ), [ & ]( literal lit, var_type type, int pos )
+        {
+            if ( type == var_type::state )
+                return lit.substitute( _system->next_state_vars().nth( pos ) );
+            else
+                return lit;
+        } );
+    }
+
+    [[nodiscard]] cube circle( cube c ) const
+    {
+        return shift_cube( std::move( c ), [ & ]( literal lit, var_type type, int pos )
+        {
+            if ( type == var_type::state )
+                return lit.substitute( _middle_state_vars.nth( pos ) );
+            else
+                return lit;
+        } );
+    }
+
+    [[nodiscard]] cube unprime( cube c ) const
+    {
+        return shift_cube( std::move( c ), [ & ]( literal lit, var_type type, int pos )
+        {
+            if ( type == var_type::next_state )
+                return lit.substitute( _system->state_vars().nth( pos ) );
+            else
+                return lit;
+        } );
+    }
+
+    [[nodiscard]] cube uncircle( cube c ) const
+    {
+        // This is special, since circled variables are not present in the
+        // original transition system and therefore, we cannot use
+        // _system->get_var_info.
+
+        auto lits = std::move( c ).literals();
+
+        for ( auto& lit : lits )
+            if ( _middle_state_vars.contains( lit.var() ) )
+                lit = lit.substitute( _system->input_vars().nth( _middle_state_vars.offset( lit.var() ) ) );
+
+        return cube{ std::move( lits ) };
+    }
+
+    [[nodiscard]] literal prime( literal lit ) const
+    {
+        const auto [ type, pos ] = _system->get_var_info( lit.var() );
+        assert( type == var_type::state );
+
+        return lit.substitute( _system->next_state_vars().nth( pos ) );
+    }
+
+    [[nodiscard]] literal circle( literal lit ) const
+    {
+        const auto [ type, pos ] = _system->get_var_info( lit.var() );
+        assert( type == var_type::state );
+
+        return lit.substitute( _middle_state_vars.nth( pos ) );
+    }
+
+    [[nodiscard]] literal unprime( literal lit ) const
+    {
+        const auto [ type, pos ] = _system->get_var_info( lit.var() );
+        assert( type == var_type::next_state );
+
+        return lit.substitute( _system->state_vars().nth( pos ) );
+    }
+
+    [[nodiscard]] literal uncircle( literal lit ) const
+    {
+        assert( _middle_state_vars.contains( lit.var() ) );
+        return lit.substitute( _system->state_vars().nth( _middle_state_vars.offset( lit.var() ) ) );
+    }
+
     void initialize();
     result_t check();
     result_t check_trivial_cases();
 
     std::optional< cex_handle > get_error_cex();
-    result_t solve_obligation( const proof_obligation& starting_po );
+    bool solve_obligation( const proof_obligation& starting_po );
     std::vector< std::vector< literal > > build_counterexample( cex_handle root );
 
     bool propagate();

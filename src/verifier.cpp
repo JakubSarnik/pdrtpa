@@ -1,6 +1,22 @@
 #include "verifier.hpp"
 #include "logger.hpp"
 #include <functional>
+#include <queue>
+
+namespace
+{
+
+// TODO: Consider adding a more efficient implementation for two cubes.
+bool intersects( const cube& c, std::span< const literal > d )
+{
+    for ( const auto lit : d )
+        if ( c.contains( !lit ) )
+            return false;
+
+    return true;
+}
+
+}
 
 auto verifier::run() -> result_t
 {
@@ -48,8 +64,8 @@ auto verifier::check() -> result_t
     {
         if ( const auto cex = get_error_cex(); cex.has_value() )
         {
-            if ( const auto trace = solve_obligation( { *cex, depth() } ); trace.has_value() )
-                return trace;
+            if ( solve_obligation( { *cex, depth() } ) )
+                return build_counterexample( *cex );
         }
         else
         {
@@ -129,15 +145,103 @@ std::optional< cex_handle > verifier::get_error_cex()
         .is_sat() )
     {
         return _cexes.make( cube{ _error_solver.get_model( _system->state_vars() ) },
+                     unprime( cube{ _error_solver.get_model( _system->next_state_vars() ) } ),
                                cube{ _error_solver.get_model( _system->input_vars() ) } );
     }
 
     return {};
 }
 
-auto verifier::solve_obligation( const proof_obligation& starting_po ) -> result_t
+// Returns true if a counterexample is found. Main loop then knows that
+// the counterexample is rooted in starting_po.
+bool verifier::solve_obligation( const proof_obligation& starting_po )
 {
-    // TODO
+    assert( 0 <= starting_po.level() && starting_po.level() <= depth() );
+
+    // TODO: Do we want a priority queue here, or does a recursive scheme
+    //       suffice/work better?
+
+    auto min_queue = std::priority_queue< proof_obligation,
+        std::vector< proof_obligation >, std::greater<> >{};
+
+    min_queue.push( starting_po );
+
+    while ( !min_queue.empty() )
+    {
+        auto po = min_queue.top();
+        min_queue.pop();
+
+        auto& cex = _cexes.get( po.handle() );
+        const auto& s = cex.s_state_vars;
+        const auto& t = cex.t_state_vars;
+
+        // We need to first check if s /\ TF[ 0 ] /\ t' is satisfiable,
+        // where TF[ 0 ] = id \/ T.
+
+        if ( intersects( s, t.literals() ) )
+            return true;
+
+        if ( _consecution_solver.query()
+                                .assume( _trans_activator )
+                                .assume( s.literals() )
+                                .assume_mapped( t.literals(), [ & ]( literal lit ){ return prime( lit ); } )
+                                .is_sat() )
+        {
+            assert( !cex.input_vars.has_value() );
+            cex.input_vars = cube{ _consecution_solver.get_model( _system->input_vars() ) };
+
+            return true;
+        }
+
+        // We know from the previous that s /\ TF[ 0 ] /\ t' is unsatisfiable,
+        // hence s does not reach t in <= 2^0 = 1 steps.
+        if ( po.level() == 0 )
+            continue;
+
+        if ( po.level() == 1 )
+        {
+            // TF[ 0 ]( X, X° ) /\ TF[ 0 ]( X°, X' ) /\ s /\ t' reduces to
+            // T( X, Y1, X° ) /\ T( X°, Y2, X' ) /\ s /\ t'.
+
+            if ( _consecution_solver.query()
+                                    .assume( _left_trans_activator )
+                                    .assume( _right_trans_activator )
+                                    .assume( s.literals() )
+                                    .assume_mapped( t.literals(), [ & ]( literal lit ){ return prime( lit ); } )
+                                    .is_sat() )
+            {
+                const auto u = uncircle( cube{ _consecution_solver.get_model( _middle_state_vars ) } );
+
+                assert( !cex.left.has_value() );
+                assert( !cex.right.has_value() );
+
+                cex.left = _cexes.make( s, u, cube{ _consecution_solver.get_model( _left_input_vars ) } );
+                cex.right = _cexes.make( u, t, cube{ _consecution_solver.get_model( _right_input_vars ) } );
+
+                return true;
+            }
+        }
+        else
+        {
+            // TODO: Is already blocked?
+            // TF[ k - 1 ]( X, X° ) /\ TF[ k - 1 ]( X°, X' ) /\ s /\ t'
+
+            if ( _consecution_solver.query()
+                                    .assume( activators_from( po.level() - 1 ) )
+                                    .assume( s.literals() )
+                                    .assume_mapped( t.literals(), [ & ]( literal lit ){ return prime( lit ); } )
+                                    .is_sat() )
+            {
+                // TODO: Middle state u found
+            }
+            else
+            {
+                // TODO: No middle state found
+            }
+        }
+    }
+
+    return false;
 }
 
 std::vector< std::vector< literal > > verifier::build_counterexample( cex_handle root )
