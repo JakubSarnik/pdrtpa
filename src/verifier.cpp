@@ -144,9 +144,9 @@ std::optional< cex_handle > verifier::get_error_cex()
         .assume( activators_from( depth() ) )
         .is_sat() )
     {
-        return _cexes.make( cube{ _error_solver.get_model( _system->state_vars() ) },
-                     unprime( cube{ _error_solver.get_model( _system->next_state_vars() ) } ),
-                               cube{ _error_solver.get_model( _system->input_vars() ) } );
+        return _cexes.make( cube{ _error_solver.get_model( _system->state_vars() ), is_sorted },
+                            unprime( cube{ _error_solver.get_model( _system->next_state_vars() ), is_sorted } ),
+                            cube{ _error_solver.get_model( _system->input_vars() ), is_sorted } );
     }
 
     return {};
@@ -188,7 +188,7 @@ bool verifier::solve_obligation( const proof_obligation& starting_po )
                                 .is_sat() )
         {
             assert( !cex.input_vars.has_value() );
-            cex.input_vars = cube{ _consecution_solver.get_model( _system->input_vars() ) };
+            cex.input_vars = cube{ _consecution_solver.get_model( _system->input_vars() ), is_sorted };
 
             return true;
         }
@@ -210,13 +210,13 @@ bool verifier::solve_obligation( const proof_obligation& starting_po )
                                     .assume( prime( t ).literals() )
                                     .is_sat() )
             {
-                const auto u = uncircle( cube{ _consecution_solver.get_model( _middle_state_vars ) } );
+                const auto u = uncircle( cube{ _consecution_solver.get_model( _middle_state_vars ), is_sorted } );
 
                 assert( !cex.left.has_value() );
                 assert( !cex.right.has_value() );
 
-                cex.left = _cexes.make( s, u, cube{ _consecution_solver.get_model( _left_input_vars ) } );
-                cex.right = _cexes.make( u, t, cube{ _consecution_solver.get_model( _right_input_vars ) } );
+                cex.left = _cexes.make( s, u, cube{ _consecution_solver.get_model( _left_input_vars ), is_sorted } );
+                cex.right = _cexes.make( u, t, cube{ _consecution_solver.get_model( _right_input_vars ), is_sorted } );
 
                 return true;
             }

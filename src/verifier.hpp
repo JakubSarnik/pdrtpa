@@ -178,7 +178,7 @@ private:
             if ( from.contains( lit.var() ) )
                 lit = shift_literal( from, to, lit );
 
-        return cube{ std::move( lits ) };
+        return cube{ std::move( lits ), is_sorted };
     }
 
     [[nodiscard]] cube prime( cube c ) const

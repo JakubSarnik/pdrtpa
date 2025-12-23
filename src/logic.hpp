@@ -285,6 +285,8 @@ inline bool cube_literal_lt( literal l1, literal l2 )
            ( l1.var().id() == l2.var().id() && !l1.positive() && l2.positive() );
 }
 
+constexpr inline struct is_sorted_t {} is_sorted;
+
 class cube
 {
     std::vector< literal > _literals;
@@ -296,6 +298,11 @@ public:
     {
         std::ranges::sort( _literals, cube_literal_lt );
     };
+
+    cube( std::vector< literal > literals, is_sorted_t /*unused*/ ) noexcept : _literals{ std::move( literals ) }
+    {
+        assert( std::ranges::is_sorted( _literals, cube_literal_lt ) );
+    }
 
     friend auto operator<=>( const cube&, const cube& ) = default;
 
