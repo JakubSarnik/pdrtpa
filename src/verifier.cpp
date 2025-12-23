@@ -184,7 +184,7 @@ bool verifier::solve_obligation( const proof_obligation& starting_po )
         if ( _consecution_solver.query()
                                 .assume( _trans_activator )
                                 .assume( s.literals() )
-                                .assume_mapped( t.literals(), [ & ]( literal lit ){ return prime( lit ); } )
+                                .assume( prime( t ).literals() )
                                 .is_sat() )
         {
             assert( !cex.input_vars.has_value() );
@@ -207,7 +207,7 @@ bool verifier::solve_obligation( const proof_obligation& starting_po )
                                     .assume( _left_trans_activator )
                                     .assume( _right_trans_activator )
                                     .assume( s.literals() )
-                                    .assume_mapped( t.literals(), [ & ]( literal lit ){ return prime( lit ); } )
+                                    .assume( prime( t ).literals() )
                                     .is_sat() )
             {
                 const auto u = uncircle( cube{ _consecution_solver.get_model( _middle_state_vars ) } );
@@ -229,7 +229,7 @@ bool verifier::solve_obligation( const proof_obligation& starting_po )
             if ( _consecution_solver.query()
                                     .assume( activators_from( po.level() - 1 ) )
                                     .assume( s.literals() )
-                                    .assume_mapped( t.literals(), [ & ]( literal lit ){ return prime( lit ); } )
+                                    .assume( prime( t ).literals() )
                                     .is_sat() )
             {
                 // TODO: Middle state u found

@@ -78,7 +78,7 @@ public:
         std::unreachable();
     }
 
-    // TODO: Do we need these? See also TODO in verifier.cpp.
+    // TODO: Do we need these? Probably not, see verifier.cpp.
     [[nodiscard]] literal prime( literal lit ) const
     {
         const auto [ type, pos ] = get_var_info( lit.var() );

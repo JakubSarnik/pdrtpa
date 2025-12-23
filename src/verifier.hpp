@@ -164,100 +164,41 @@ private:
         }
     }
 
-    // TODO: All this stuff should be done by the transition system.
-    //       Consider moving all the left/right input vars, middle state vars
-    //       etc. machinery there.
+    [[nodiscard]] static literal shift_literal( variable_range from, variable_range to, literal lit )
+    {
+        assert( from.contains( lit.var() ) );
+        return lit.substitute( to.nth( from.offset( lit.var() ) ) );
+    }
 
-    template< std::regular_invocable< literal, var_type, int > F >
-    [[nodiscard]] cube shift_cube( cube c, const F& f ) const
+    [[nodiscard]] static cube shift_cube( variable_range from, variable_range to, cube c )
     {
         auto lits = std::move( c ).literals();
 
         for ( auto& lit : lits )
-        {
-            const auto [ type, pos ] = _system->get_var_info( lit.var() );
-            lit = f( lit, type, pos );
-        }
+            if ( from.contains( lit.var() ) )
+                lit = shift_literal( from, to, lit );
 
         return cube{ std::move( lits ) };
     }
 
     [[nodiscard]] cube prime( cube c ) const
     {
-        return shift_cube( std::move( c ), [ & ]( literal lit, var_type type, int pos )
-        {
-            if ( type == var_type::state )
-                return lit.substitute( _system->next_state_vars().nth( pos ) );
-            else
-                return lit;
-        } );
+        return shift_cube( _system->state_vars(), _system->next_state_vars(), std::move( c ) );
     }
 
     [[nodiscard]] cube circle( cube c ) const
     {
-        return shift_cube( std::move( c ), [ & ]( literal lit, var_type type, int pos )
-        {
-            if ( type == var_type::state )
-                return lit.substitute( _middle_state_vars.nth( pos ) );
-            else
-                return lit;
-        } );
+        return shift_cube( _system->state_vars(), _middle_state_vars, std::move( c ) );
     }
 
     [[nodiscard]] cube unprime( cube c ) const
     {
-        return shift_cube( std::move( c ), [ & ]( literal lit, var_type type, int pos )
-        {
-            if ( type == var_type::next_state )
-                return lit.substitute( _system->state_vars().nth( pos ) );
-            else
-                return lit;
-        } );
+        return shift_cube( _system->next_state_vars(), _system->state_vars(), std::move( c ) );
     }
 
     [[nodiscard]] cube uncircle( cube c ) const
     {
-        // This is special, since circled variables are not present in the
-        // original transition system and therefore, we cannot use
-        // _system->get_var_info.
-
-        auto lits = std::move( c ).literals();
-
-        for ( auto& lit : lits )
-            if ( _middle_state_vars.contains( lit.var() ) )
-                lit = lit.substitute( _system->input_vars().nth( _middle_state_vars.offset( lit.var() ) ) );
-
-        return cube{ std::move( lits ) };
-    }
-
-    [[nodiscard]] literal prime( literal lit ) const
-    {
-        const auto [ type, pos ] = _system->get_var_info( lit.var() );
-        assert( type == var_type::state );
-
-        return lit.substitute( _system->next_state_vars().nth( pos ) );
-    }
-
-    [[nodiscard]] literal circle( literal lit ) const
-    {
-        const auto [ type, pos ] = _system->get_var_info( lit.var() );
-        assert( type == var_type::state );
-
-        return lit.substitute( _middle_state_vars.nth( pos ) );
-    }
-
-    [[nodiscard]] literal unprime( literal lit ) const
-    {
-        const auto [ type, pos ] = _system->get_var_info( lit.var() );
-        assert( type == var_type::next_state );
-
-        return lit.substitute( _system->state_vars().nth( pos ) );
-    }
-
-    [[nodiscard]] literal uncircle( literal lit ) const
-    {
-        assert( _middle_state_vars.contains( lit.var() ) );
-        return lit.substitute( _system->state_vars().nth( _middle_state_vars.offset( lit.var() ) ) );
+        return shift_cube( _middle_state_vars, _system->state_vars(), std::move( c ) );
     }
 
     void initialize();
