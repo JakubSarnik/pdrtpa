@@ -170,35 +170,37 @@ private:
         return lit.substitute( to.nth( from.offset( lit.var() ) ) );
     }
 
-    [[nodiscard]] static cube shift_cube( variable_range from, variable_range to, cube c )
+    [[nodiscard]] static std::vector< literal > shift_literals( variable_range from, variable_range to,
+        std::span< const literal > literals )
     {
-        auto lits = std::move( c ).literals();
+        auto lits = std::vector< literal >{};
+        // TODO: Consider reserve
 
-        for ( auto& lit : lits )
+        for ( auto lit : literals )
             if ( from.contains( lit.var() ) )
-                lit = shift_literal( from, to, lit );
+                lits.push_back( shift_literal( from, to, lit ) );
 
-        return cube{ std::move( lits ), is_sorted };
+        return lits;
     }
 
-    [[nodiscard]] cube prime( cube c ) const
+    [[nodiscard]] std::vector< literal > prime( std::span< const literal > literals ) const
     {
-        return shift_cube( _system->state_vars(), _system->next_state_vars(), std::move( c ) );
+        return shift_literals( _system->state_vars(), _system->next_state_vars(), literals );
     }
 
-    [[nodiscard]] cube circle( cube c ) const
+    [[nodiscard]] std::vector< literal > circle( std::span< const literal > literals ) const
     {
-        return shift_cube( _system->state_vars(), _middle_state_vars, std::move( c ) );
+        return shift_literals( _system->state_vars(), _middle_state_vars, literals );
     }
 
-    [[nodiscard]] cube unprime( cube c ) const
+    [[nodiscard]] std::vector< literal > unprime( std::span< const literal > literals ) const
     {
-        return shift_cube( _system->next_state_vars(), _system->state_vars(), std::move( c ) );
+        return shift_literals( _system->next_state_vars(), _system->state_vars(), literals );
     }
 
-    [[nodiscard]] cube uncircle( cube c ) const
+    [[nodiscard]] std::vector< literal > uncircle( std::span< const literal > literals ) const
     {
-        return shift_cube( _middle_state_vars, _system->state_vars(), std::move( c ) );
+        return shift_literals( _middle_state_vars, _system->state_vars(), literals );
     }
 
     void initialize();
@@ -207,9 +209,25 @@ private:
 
     std::optional< cex_handle > get_error_cex();
     bool solve_obligation( const proof_obligation& starting_po );
+
+    // Returns the input valuation of the edge s -> t.
+    std::optional< cube > has_edge( std::span< const literal > s, std::span< const literal > t );
+
+    struct two_edges
+    {
+        cube left_input;
+        cube middle_state; // State cube
+        cube right_input;
+    };
+
+    std::optional< two_edges > has_path_of_length_two( std::span< const literal > s, std::span< const literal > t );
+    std::optional< cube > has_middle_state( std::span< const literal > s, std::span< const literal > t, int level );
+
     std::vector< std::vector< literal > > build_counterexample( cex_handle root );
 
     bool propagate();
+
+    [[nodiscard]] [[maybe_unused]] bool is_state_cube( std::span< const literal > literals ) const;
 
 public:
     explicit verifier( variable_store& store, const transition_system& system ) :

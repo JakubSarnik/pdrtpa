@@ -145,7 +145,7 @@ std::optional< cex_handle > verifier::get_error_cex()
         .is_sat() )
     {
         return _cexes.make( cube{ _error_solver.get_model( _system->state_vars() ), is_sorted },
-                            unprime( cube{ _error_solver.get_model( _system->next_state_vars() ), is_sorted } ),
+                            cube{ unprime( _error_solver.get_model( _system->next_state_vars() ) ), is_sorted },
                             cube{ _error_solver.get_model( _system->input_vars() ), is_sorted } );
     }
 
@@ -181,14 +181,12 @@ bool verifier::solve_obligation( const proof_obligation& starting_po )
         if ( intersects( s, t.literals() ) )
             return true;
 
-        if ( _consecution_solver.query()
-                                .assume( _trans_activator )
-                                .assume( s.literals() )
-                                .assume( prime( t ).literals() )
-                                .is_sat() )
+        // TODO: Consider decomposing this even further, has_* should also set inputs, left and right!
+        //       That way, we could get rid of two_edges and similar stuff.
+        if ( auto ins = has_edge( s.literals(), t.literals() ); ins.has_value() )
         {
             assert( !cex.input_vars.has_value() );
-            cex.input_vars = cube{ _consecution_solver.get_model( _system->input_vars() ), is_sorted };
+            cex.input_vars = std::move( *ins );
 
             return true;
         }
@@ -203,20 +201,15 @@ bool verifier::solve_obligation( const proof_obligation& starting_po )
             // TF[ 0 ]( X, X° ) /\ TF[ 0 ]( X°, X' ) /\ s /\ t' reduces to
             // T( X, Y1, X° ) /\ T( X°, Y2, X' ) /\ s /\ t'.
 
-            if ( _consecution_solver.query()
-                                    .assume( _left_trans_activator )
-                                    .assume( _right_trans_activator )
-                                    .assume( s.literals() )
-                                    .assume( prime( t ).literals() )
-                                    .is_sat() )
+            if ( auto path = has_path_of_length_two( s.literals(), t.literals() ); path.has_value() )
             {
-                const auto u = uncircle( cube{ _consecution_solver.get_model( _middle_state_vars ), is_sorted } );
-
                 assert( !cex.left.has_value() );
                 assert( !cex.right.has_value() );
 
-                cex.left = _cexes.make( s, u, cube{ _consecution_solver.get_model( _left_input_vars ), is_sorted } );
-                cex.right = _cexes.make( u, t, cube{ _consecution_solver.get_model( _right_input_vars ), is_sorted } );
+                // TODO: Copying of the middle state here is a bit ugly. Can't
+                //       we store cubes in a pool?
+                cex.left = _cexes.make( s, path->middle_state, std::move( path->left_input ) );
+                cex.right = _cexes.make( std::move( path->middle_state ), t, std::move( path->right_input ) );
 
                 return true;
             }
@@ -226,11 +219,7 @@ bool verifier::solve_obligation( const proof_obligation& starting_po )
             // TODO: Is already blocked?
             // TF[ k - 1 ]( X, X° ) /\ TF[ k - 1 ]( X°, X' ) /\ s /\ t'
 
-            if ( _consecution_solver.query()
-                                    .assume( activators_from( po.level() - 1 ) )
-                                    .assume( s.literals() )
-                                    .assume( prime( t ).literals() )
-                                    .is_sat() )
+            if ( auto u = has_middle_state( s.literals(), t.literals(), po.level() ); u.has_value() )
             {
                 // TODO: Middle state u found
             }
@@ -242,6 +231,63 @@ bool verifier::solve_obligation( const proof_obligation& starting_po )
     }
 
     return false;
+}
+
+std::optional< cube > verifier::has_edge( std::span< const literal > s, std::span< const literal > t )
+{
+    assert( is_state_cube( s ) );
+    assert( is_state_cube( t ) );
+
+    if ( _consecution_solver
+            .query()
+            .assume( _trans_activator )
+            .assume( s )
+            .assume( prime( t ) )
+            .is_sat() )
+        return cube{ _consecution_solver.get_model( _system->input_vars() ), is_sorted };
+    else
+        return {};
+}
+
+auto verifier::has_path_of_length_two( std::span< const literal > s, std::span< const literal > t )
+    -> std::optional< two_edges >
+{
+    assert( is_state_cube( s ) );
+    assert( is_state_cube( t ) );
+
+    if ( _consecution_solver
+            .query()
+            .assume( _left_trans_activator )
+            .assume( _right_trans_activator )
+            .assume( s )
+            .assume( prime( t ) )
+            .is_sat() )
+        return two_edges
+        {
+            .left_input = cube{ _consecution_solver.get_model( _left_input_vars ), is_sorted },
+            .middle_state = cube{ uncircle( _consecution_solver.get_model( _middle_state_vars ) ), is_sorted },
+            .right_input = cube{ _consecution_solver.get_model( _right_input_vars ), is_sorted }
+        };
+    else
+        return {};
+}
+
+std::optional< cube > verifier::has_middle_state( std::span< const literal > s, std::span< const literal > t,
+    int level )
+{
+    assert( is_state_cube( s ) );
+    assert( is_state_cube( t ) );
+    assert( level >= 2 && level <= depth() ); // Levels 0 and 1 are checked separately
+
+    if ( _consecution_solver
+            .query()
+            .assume( activators_from( level - 1 ) )
+            .assume( s )
+            .assume( prime( t ) )
+            .is_sat() )
+        return cube{ unprime( _consecution_solver.get_model( _middle_state_vars ) ), is_sorted };
+    else
+        return {};
 }
 
 std::vector< std::vector< literal > > verifier::build_counterexample( cex_handle root )
@@ -280,4 +326,17 @@ std::vector< std::vector< literal > > verifier::build_counterexample( cex_handle
 bool verifier::propagate()
 {
     // TODO
+}
+
+// Returns true if cube contains only state variables. Used for assertions
+// only.
+bool verifier::is_state_cube( std::span< const literal > literals ) const
+{
+    const auto is_state_var = [ & ]( variable var )
+    {
+        const auto [ type, _ ] = _system->get_var_info( var );
+        return type == var_type::state;
+    };
+
+    return std::ranges::all_of( literals, [ & ]( literal lit ){ return is_state_var( lit.var() ); } );
 }
