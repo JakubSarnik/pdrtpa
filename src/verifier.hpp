@@ -25,7 +25,7 @@ class cex_pool
 
 public:
     // Beware that the handle is invalidated after the next call to clear!
-    [[nodiscard]] cex_handle make( cube s_state_vars, cube t_state_vars, std::optional< cube > input_vars )
+    [[nodiscard]] cex_handle make( cube s_state_vars, cube t_state_vars, std::optional< cube > input_vars = {} )
     {
         _entries.emplace_back( std::move( s_state_vars ), std::move( t_state_vars ), std::move( input_vars ) );
         return _entries.size() - 1;
@@ -208,7 +208,7 @@ private:
     result_t check_trivial_cases();
 
     std::optional< cex_handle > get_error_cex();
-    bool solve_obligation( const proof_obligation& starting_po );
+    bool solve_obligation( const proof_obligation& po );
 
     // Returns the input valuation of the edge s -> t.
     std::optional< cube > has_edge( std::span< const literal > s, std::span< const literal > t );
@@ -222,6 +222,8 @@ private:
 
     std::optional< two_edges > has_path_of_length_two( std::span< const literal > s, std::span< const literal > t );
     std::optional< cube > has_middle_state( std::span< const literal > s, std::span< const literal > t, int level );
+
+    void block_arrow_at( const cube& s, const cube& t, int level, int start_from = 1 );
 
     std::vector< std::vector< literal > > build_counterexample( cex_handle root );
 
