@@ -181,44 +181,22 @@ bool verifier::solve_obligation( const proof_obligation& po )
     if ( intersects( s, t.literals() ) )
         return true;
 
-    // TODO: Consider decomposing this even further, has_* should also set inputs, left and right!
-    //       That way, we could get rid of two_edges and similar stuff.
-    if ( auto ins = has_edge( s.literals(), t.literals() ); ins.has_value() )
-    {
-        assert( !cex.input_vars.has_value() );
-        cex.input_vars = std::move( *ins );
-
+    if ( has_concrete_edge( cex ) )
         return true;
-    }
 
     // We know from the previous that s /\ TF[ 0 ] /\ t' is unsatisfiable,
     // hence s does not reach t in <= 2^0 = 1 steps.
     if ( po.level() == 0 )
         return false;
 
+    // TF[ 0 ]( X, X° ) /\ TF[ 0 ]( X°, X' ) /\ s /\ t' now reduces to
+    // T( X, Y1, X° ) /\ T( X°, Y2, X' ) /\ s /\ t'.
     if ( po.level() == 1 )
-    {
-        // TF[ 0 ]( X, X° ) /\ TF[ 0 ]( X°, X' ) /\ s /\ t' now reduces to
-        // T( X, Y1, X° ) /\ T( X°, Y2, X' ) /\ s /\ t'.
-
-        if ( auto path = has_path_of_length_two( s.literals(), t.literals() ); path.has_value() )
-        {
-            assert( !cex.left.has_value() );
-            assert( !cex.right.has_value() );
-            assert( is_state_cube( path->middle_state.literals() ) );
-
-            // TODO: Copying of the middle state here is a bit ugly. Can't
-            //       we store cubes in a pool?
-            cex.left = _cexes.make( s, path->middle_state, std::move( path->left_input ) );
-            cex.right = _cexes.make( std::move( path->middle_state ), t, std::move( path->right_input ) );
-
-            return true;
-        }
-
-        return false;
-    }
+        return has_path_of_length_two( cex );
 
     // TF[ k - 1 ]( X, X° ) /\ TF[ k - 1 ]( X°, X' ) /\ s /\ t'
+    // TODO: Change this so has_middle_state sets cex.left and cex.right
+    //       similarly to the previous code.
     auto u = has_middle_state( s.literals(), t.literals(), po.level() );
 
     while ( u.has_value() )
@@ -246,8 +224,11 @@ bool verifier::solve_obligation( const proof_obligation& po )
     return false;
 }
 
-std::optional< cube > verifier::has_edge( std::span< const literal > s, std::span< const literal > t )
+bool verifier::has_concrete_edge( cex_entry& cex )
 {
+    const auto& s = cex.s_state_vars.literals();
+    const auto& t = cex.t_state_vars.literals();
+
     assert( is_state_cube( s ) );
     assert( is_state_cube( t ) );
 
@@ -257,14 +238,21 @@ std::optional< cube > verifier::has_edge( std::span< const literal > s, std::spa
             .assume( s )
             .assume( prime( t ) )
             .is_sat() )
-        return cube{ _consecution_solver.get_model( _system->input_vars() ), is_sorted };
-    else
-        return {};
+    {
+        assert( !cex.input_vars.has_value() );
+        cex.input_vars = cube{ _consecution_solver.get_model( _system->input_vars() ), is_sorted };
+
+        return true;
+    }
+
+    return false;
 }
 
-auto verifier::has_path_of_length_two( std::span< const literal > s, std::span< const literal > t )
-    -> std::optional< two_edges >
+bool verifier::has_path_of_length_two( cex_entry& cex )
 {
+    const auto& s = cex.s_state_vars.literals();
+    const auto& t = cex.t_state_vars.literals();
+
     assert( is_state_cube( s ) );
     assert( is_state_cube( t ) );
 
@@ -275,14 +263,24 @@ auto verifier::has_path_of_length_two( std::span< const literal > s, std::span< 
             .assume( s )
             .assume( prime( t ) )
             .is_sat() )
-        return two_edges
-        {
-            .left_input = cube{ _consecution_solver.get_model( _left_input_vars ), is_sorted },
-            .middle_state = cube{ uncircle( _consecution_solver.get_model( _middle_state_vars ) ), is_sorted },
-            .right_input = cube{ _consecution_solver.get_model( _right_input_vars ), is_sorted }
-        };
-    else
-        return {};
+    {
+        auto middle_state = cube{ uncircle( _consecution_solver.get_model( _middle_state_vars ) ), is_sorted };
+
+        assert( is_state_cube( middle_state.literals() ) );
+        assert( !cex.left.has_value() );
+        assert( !cex.right.has_value() );
+
+        // TODO: Copying of the state cubes here is a bit ugly. Can't
+        //       we store cubes in a pool?
+        cex.left = _cexes.make( cex.s_state_vars, middle_state,
+            cube{ _consecution_solver.get_model( _left_input_vars ), is_sorted } );
+        cex.right = _cexes.make( std::move( middle_state ), cex.t_state_vars,
+            cube{ _consecution_solver.get_model( _right_input_vars ), is_sorted } );
+
+        return true;
+    }
+
+    return false;
 }
 
 std::optional< cube > verifier::has_middle_state( std::span< const literal > s, std::span< const literal > t,

@@ -210,17 +210,8 @@ private:
     std::optional< cex_handle > get_error_cex();
     bool solve_obligation( const proof_obligation& po );
 
-    // Returns the input valuation of the edge s -> t.
-    std::optional< cube > has_edge( std::span< const literal > s, std::span< const literal > t );
-
-    struct two_edges
-    {
-        cube left_input;
-        cube middle_state; // State cube
-        cube right_input;
-    };
-
-    std::optional< two_edges > has_path_of_length_two( std::span< const literal > s, std::span< const literal > t );
+    bool has_concrete_edge( cex_entry& cex );
+    bool has_path_of_length_two( cex_entry& cex );
     std::optional< cube > has_middle_state( std::span< const literal > s, std::span< const literal > t, int level );
 
     void block_arrow_at( const cube& s, const cube& t, int level, int start_from = 1 );
