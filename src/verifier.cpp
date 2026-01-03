@@ -16,6 +16,17 @@ bool intersects( const cube& c, std::span< const literal > d )
     return true;
 }
 
+cube sorted_cube_union( std::span< const literal > a, std::span< const literal > b )
+{
+    assert( std::ranges::is_sorted( a, cube_literal_lt ) );
+    assert( std::ranges::is_sorted( b, cube_literal_lt ) );
+
+    auto lits = std::vector( a.begin(), a.end() );
+    lits.append_range( b );
+
+    return cube{ std::move( lits ), is_sorted };
+}
+
 }
 
 auto verifier::run() -> result_t
@@ -154,81 +165,83 @@ std::optional< cex_handle > verifier::get_error_cex()
 
 // Returns true if a counterexample is found. Main loop then knows that
 // the counterexample is rooted in starting_po.
-bool verifier::solve_obligation( const proof_obligation& starting_po )
+bool verifier::solve_obligation( const proof_obligation& po )
 {
-    assert( 0 <= starting_po.level() && starting_po.level() <= depth() );
+    assert( 0 <= po.level() && po.level() <= depth() );
 
-    // TODO: Do we want a priority queue here, or does a recursive scheme
-    //       suffice/work better?
+    auto& cex = _cexes.get( po.handle() );
+    const auto& s = cex.s_state_vars;
+    const auto& t = cex.t_state_vars;
 
-    auto min_queue = std::priority_queue< proof_obligation,
-        std::vector< proof_obligation >, std::greater<> >{};
+    // We need to first check if s /\ TF[ 0 ] /\ t' is satisfiable,
+    // where TF[ 0 ] = id \/ T.
 
-    min_queue.push( starting_po );
+    // TODO: As long as we don't generalize states, a syntactic equivalence
+    //       check suffices here.
+    if ( intersects( s, t.literals() ) )
+        return true;
 
-    while ( !min_queue.empty() )
+    // TODO: Consider decomposing this even further, has_* should also set inputs, left and right!
+    //       That way, we could get rid of two_edges and similar stuff.
+    if ( auto ins = has_edge( s.literals(), t.literals() ); ins.has_value() )
     {
-        auto po = min_queue.top();
-        min_queue.pop();
+        assert( !cex.input_vars.has_value() );
+        cex.input_vars = std::move( *ins );
 
-        auto& cex = _cexes.get( po.handle() );
-        const auto& s = cex.s_state_vars;
-        const auto& t = cex.t_state_vars;
-
-        // We need to first check if s /\ TF[ 0 ] /\ t' is satisfiable,
-        // where TF[ 0 ] = id \/ T.
-
-        if ( intersects( s, t.literals() ) )
-            return true;
-
-        // TODO: Consider decomposing this even further, has_* should also set inputs, left and right!
-        //       That way, we could get rid of two_edges and similar stuff.
-        if ( auto ins = has_edge( s.literals(), t.literals() ); ins.has_value() )
-        {
-            assert( !cex.input_vars.has_value() );
-            cex.input_vars = std::move( *ins );
-
-            return true;
-        }
-
-        // We know from the previous that s /\ TF[ 0 ] /\ t' is unsatisfiable,
-        // hence s does not reach t in <= 2^0 = 1 steps.
-        if ( po.level() == 0 )
-            continue;
-
-        if ( po.level() == 1 )
-        {
-            // TF[ 0 ]( X, X° ) /\ TF[ 0 ]( X°, X' ) /\ s /\ t' reduces to
-            // T( X, Y1, X° ) /\ T( X°, Y2, X' ) /\ s /\ t'.
-
-            if ( auto path = has_path_of_length_two( s.literals(), t.literals() ); path.has_value() )
-            {
-                assert( !cex.left.has_value() );
-                assert( !cex.right.has_value() );
-
-                // TODO: Copying of the middle state here is a bit ugly. Can't
-                //       we store cubes in a pool?
-                cex.left = _cexes.make( s, path->middle_state, std::move( path->left_input ) );
-                cex.right = _cexes.make( std::move( path->middle_state ), t, std::move( path->right_input ) );
-
-                return true;
-            }
-        }
-        else
-        {
-            // TODO: Is already blocked?
-            // TF[ k - 1 ]( X, X° ) /\ TF[ k - 1 ]( X°, X' ) /\ s /\ t'
-
-            if ( auto u = has_middle_state( s.literals(), t.literals(), po.level() ); u.has_value() )
-            {
-                // TODO: Middle state u found
-            }
-            else
-            {
-                // TODO: No middle state found
-            }
-        }
+        return true;
     }
+
+    // We know from the previous that s /\ TF[ 0 ] /\ t' is unsatisfiable,
+    // hence s does not reach t in <= 2^0 = 1 steps.
+    if ( po.level() == 0 )
+        return false;
+
+    if ( po.level() == 1 )
+    {
+        // TF[ 0 ]( X, X° ) /\ TF[ 0 ]( X°, X' ) /\ s /\ t' now reduces to
+        // T( X, Y1, X° ) /\ T( X°, Y2, X' ) /\ s /\ t'.
+
+        if ( auto path = has_path_of_length_two( s.literals(), t.literals() ); path.has_value() )
+        {
+            assert( !cex.left.has_value() );
+            assert( !cex.right.has_value() );
+            assert( is_state_cube( path->middle_state.literals() ) );
+
+            // TODO: Copying of the middle state here is a bit ugly. Can't
+            //       we store cubes in a pool?
+            cex.left = _cexes.make( s, path->middle_state, std::move( path->left_input ) );
+            cex.right = _cexes.make( std::move( path->middle_state ), t, std::move( path->right_input ) );
+
+            return true;
+        }
+
+        return false;
+    }
+
+    // TF[ k - 1 ]( X, X° ) /\ TF[ k - 1 ]( X°, X' ) /\ s /\ t'
+    auto u = has_middle_state( s.literals(), t.literals(), po.level() );
+
+    while ( u.has_value() )
+    {
+        assert( !cex.left.has_value() );
+        assert( !cex.right.has_value() );
+        assert( is_state_cube( u->literals() ) );
+
+        // TODO: See above about copying of u.
+        auto left = proof_obligation{ _cexes.make( s, *u ), po.level() - 1 };
+        auto right = proof_obligation{ _cexes.make( std::move( *u ), t ), po.level() - 1 };
+
+        cex.left = left.handle();
+        cex.right = right.handle();
+
+        if ( solve_obligation( left ) && solve_obligation( right ) )
+            return true;
+
+        u = has_middle_state( s.literals(), t.literals(), po.level() );
+    }
+
+    // TODO: Generalize the blocked arrow here!
+    block_arrow_at( s, t, po.level() );
 
     return false;
 }
@@ -285,9 +298,46 @@ std::optional< cube > verifier::has_middle_state( std::span< const literal > s, 
             .assume( s )
             .assume( prime( t ) )
             .is_sat() )
-        return cube{ unprime( _consecution_solver.get_model( _middle_state_vars ) ), is_sorted };
+        return cube{ uncircle( _consecution_solver.get_model( _middle_state_vars ) ), is_sorted };
     else
         return {};
+}
+
+void verifier::block_arrow_at( const cube& s, const cube& t, int level, int start_from /* = 1 */ )
+{
+    assert( 1 <= level && level <= depth() );
+    assert( 1 <= start_from && start_from <= level );
+    assert( is_state_cube( s.literals() ) );
+    assert( is_state_cube( t.literals() ) );
+
+    const auto c = sorted_cube_union( s.literals(), prime( t.literals() ) );
+
+    for ( int d = start_from; d <= depth(); ++d )
+    {
+        auto& cubes = _trace_blocked_cubes[ d ];
+
+        for ( std::size_t i = 0; i < cubes.size(); )
+        {
+            if ( c.subsumes( cubes[ i ] ) )
+            {
+                cubes[ i ] = cubes.back();
+                cubes.pop_back();
+            }
+            else
+                ++i;
+        }
+    }
+
+    assert( level < _trace_blocked_cubes.size() );
+    assert( level < _trace_activators.size() );
+
+    _trace_blocked_cubes[ level ].emplace_back( c );
+
+    const auto v = _trace_activators[ level ].var();
+
+    _error_solver.assert_formula( c.negate().activate( v ) );
+    _consecution_solver.assert_formula( sorted_cube_union( s.literals(), circle( t.literals() ) ).negate().activate( v ) );
+    _consecution_solver.assert_formula( sorted_cube_union( prime( t.literals() ), circle( s.literals() ) ).negate().activate( v ) );
 }
 
 std::vector< std::vector< literal > > verifier::build_counterexample( cex_handle root )
