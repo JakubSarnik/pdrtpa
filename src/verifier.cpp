@@ -187,25 +187,37 @@ bool verifier::solve_obligation( const proof_obligation& po )
     if ( po.level() == 0 )
         return false;
 
-    // TF[ 0 ]( X, X° ) /\ TF[ 0 ]( X°, X' ) /\ s /\ t' now reduces to
-    // T( X, Y1, X° ) /\ T( X°, Y2, X' ) /\ s /\ t'.
     if ( po.level() == 1 )
-        return has_path_of_length_two( cex );
-
-    // TF[ k - 1 ]( X, X° ) /\ TF[ k - 1 ]( X°, X' ) /\ s /\ t'
-    auto pair = split_in_the_middle( po );
-
-    while ( pair.has_value() )
     {
-        const auto& [ left, right ] = *pair;
+        // TF[ 0 ]( X, X° ) /\ TF[ 0 ]( X°, X' ) /\ s /\ t' now reduces to
+        // T( X, Y1, X° ) /\ T( X°, Y2, X' ) /\ s /\ t'.
 
-        if ( solve_obligation( left ) && solve_obligation( right ) )
+        if ( has_path_of_length_two( cex ) )
             return true;
+    }
+    else
+    {
+        // TF[ k - 1 ]( X, X° ) /\ TF[ k - 1 ]( X°, X' ) /\ s /\ t'
 
-        pair = split_in_the_middle( po );
+        auto pair = split_in_the_middle( po );
+
+        while ( pair.has_value() )
+        {
+            const auto& [ left, right ] = *pair;
+
+            if ( solve_obligation( left ) && solve_obligation( right ) )
+                return true;
+
+            pair = split_in_the_middle( po );
+        }
     }
 
     // TODO: Generalize the blocked arrow here!
+
+    logger::log_line_debug( "Found a spurious arrow at level {}", po.level() );
+    logger::log_line_debug( "\ts = {}", s.to_string() );
+    logger::log_line_debug( "\tt = {}", t.to_string() );
+
     block_arrow_at( s, t, po.level() );
 
     return false;
@@ -318,32 +330,35 @@ void verifier::block_arrow_at( const cube& s, const cube& t, int level, int star
     assert( is_state_cube( s.literals() ) );
     assert( is_state_cube( t.literals() ) );
 
-    const auto c = sorted_cube_union( s.literals(), prime( t.literals() ) );
-
     for ( int d = start_from; d <= depth(); ++d )
     {
-        auto& cubes = _trace_blocked_cubes[ d ];
+        auto& arrows = _trace_blocked_arrows[ d ];
 
-        for ( std::size_t i = 0; i < cubes.size(); )
+        for ( std::size_t i = 0; i < arrows.size(); )
         {
-            if ( c.subsumes( cubes[ i ] ) )
+            const auto& [ other_s, other_t ] = arrows[ i ];
+
+            assert( is_state_cube( other_s.literals() ) );
+            assert( is_state_cube( other_t.literals() ) );
+
+            if ( s.subsumes( other_s ) && t.subsumes( other_t ) )
             {
-                cubes[ i ] = cubes.back();
-                cubes.pop_back();
+                arrows[ i ] = arrows.back();
+                arrows.pop_back();
             }
             else
                 ++i;
         }
     }
 
-    assert( level < _trace_blocked_cubes.size() );
+    assert( level < _trace_blocked_arrows.size() );
     assert( level < _trace_activators.size() );
 
-    _trace_blocked_cubes[ level ].emplace_back( c );
+    _trace_blocked_arrows[ level ].emplace_back( s, t );
 
     const auto v = _trace_activators[ level ].var();
 
-    _error_solver.assert_formula( c.negate().activate( v ) );
+    _error_solver.assert_formula( sorted_cube_union( s.literals(), prime( t.literals() ) ).negate().activate( v ) );
     _consecution_solver.assert_formula( sorted_cube_union( s.literals(), circle( t.literals() ) ).negate().activate( v ) );
     _consecution_solver.assert_formula( sorted_cube_union( prime( t.literals() ), circle( s.literals() ) ).negate().activate( v ) );
 }
@@ -381,9 +396,51 @@ std::vector< std::vector< literal > > verifier::build_counterexample( cex_handle
     return inputs;
 }
 
+// Returns true if the system has been proven safe by finding an invariant.
 bool verifier::propagate()
 {
-    // TODO
+    logger::log_line_debug( "Propagating to level {}", depth() );
+
+    assert( depth() < _trace_blocked_arrows.size() );
+    assert( _trace_blocked_arrows[ depth() ].empty() );
+
+    for ( int i = 1; i < depth(); ++i )
+    {
+        // The copy is done since the _trace_blocked_arrows[ i ] will be changed
+        // during the forthcoming iteration.
+        const auto arrows = _trace_blocked_arrows[ i ];
+
+        for ( const auto& [ s, t ] : arrows )
+        {
+            if ( _consecution_solver
+                    .query()
+                    .assume( activators_from( i ) )
+                    .assume( s.literals() )
+                    .assume( prime( t.literals() ) )
+                    .is_unsat() )
+            {
+                // TODO: Generalization? (E.g. as in generalize_from_core in PDR).
+                block_arrow_at( s, t, i + 1, i );
+            }
+        }
+
+        if ( _trace_blocked_arrows[ i ].empty() )
+            return true;
+    }
+
+    log_trace_content();
+
+    return false;
+}
+
+void verifier::log_trace_content() const
+{
+    auto line = std::format( "{}:", depth() );
+
+    for ( int i = 1; i <= depth(); ++i )
+        line += std::format( " {}", _trace_blocked_arrows[ i ].size() );
+
+    logger::log_line_loud( "{}", line );
 }
 
 // Returns true if cube contains only state variables. Used for assertions

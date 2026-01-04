@@ -106,9 +106,7 @@ private:
     cnf_formula _left_trans; // T(X, Y1, X°)
     cnf_formula _right_trans; // T(X°, Y2, X')
 
-    using cubes = std::vector< cube >;
-
-    std::vector< cubes > _trace_blocked_cubes;
+    std::vector< std::vector< std::pair< cube, cube > > > _trace_blocked_arrows;
     std::vector< literal > _trace_activators;
     literal _trans_activator; // Activates T(X, Y, X') in _consecution_solver
     literal _left_trans_activator; // Activates T(X, Y1, X°) in _consecution_solver
@@ -117,15 +115,15 @@ private:
 
     [[nodiscard]] int depth() const
     {
-        assert( _trace_blocked_cubes.size() <= std::numeric_limits< int >::max() );
-        return static_cast< int >( _trace_blocked_cubes.size() ) - 1;
+        assert( _trace_blocked_arrows.size() <= std::numeric_limits< int >::max() );
+        return static_cast< int >( _trace_blocked_arrows.size() ) - 1;
     }
 
     void push_frame()
     {
-        assert( _trace_blocked_cubes.size() == _trace_activators.size() );
+        assert( _trace_blocked_arrows.size() == _trace_activators.size() );
 
-        _trace_blocked_cubes.emplace_back();
+        _trace_blocked_arrows.emplace_back();
         _trace_activators.emplace_back( _store->make() );
     }
 
@@ -220,6 +218,7 @@ private:
 
     bool propagate();
 
+    void log_trace_content() const;
     [[nodiscard]] [[maybe_unused]] bool is_state_cube( std::span< const literal > literals ) const;
 
 public:
