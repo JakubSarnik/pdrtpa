@@ -195,27 +195,16 @@ bool verifier::solve_obligation( const proof_obligation& po )
         return has_path_of_length_two( cex );
 
     // TF[ k - 1 ]( X, X° ) /\ TF[ k - 1 ]( X°, X' ) /\ s /\ t'
-    // TODO: Change this so has_middle_state sets cex.left and cex.right
-    //       similarly to the previous code.
-    auto u = has_middle_state( s.literals(), t.literals(), po.level() );
+    auto pair = split_in_the_middle( po );
 
-    while ( u.has_value() )
+    while ( pair.has_value() )
     {
-        assert( !cex.left.has_value() );
-        assert( !cex.right.has_value() );
-        assert( is_state_cube( u->literals() ) );
-
-        // TODO: See above about copying of u.
-        auto left = proof_obligation{ _cexes.make( s, *u ), po.level() - 1 };
-        auto right = proof_obligation{ _cexes.make( std::move( *u ), t ), po.level() - 1 };
-
-        cex.left = left.handle();
-        cex.right = right.handle();
+        const auto& [ left, right ] = *pair;
 
         if ( solve_obligation( left ) && solve_obligation( right ) )
             return true;
 
-        u = has_middle_state( s.literals(), t.literals(), po.level() );
+        pair = split_in_the_middle( po );
     }
 
     // TODO: Generalize the blocked arrow here!
@@ -283,22 +272,45 @@ bool verifier::has_path_of_length_two( cex_entry& cex )
     return false;
 }
 
-std::optional< cube > verifier::has_middle_state( std::span< const literal > s, std::span< const literal > t,
-    int level )
+auto verifier::split_in_the_middle( const proof_obligation& po )
+    -> std::optional< std::pair< proof_obligation, proof_obligation > >
 {
+    auto& cex = _cexes.get( po.handle() );
+    const auto& s = cex.s_state_vars.literals();
+    const auto& t = cex.t_state_vars.literals();
+
     assert( is_state_cube( s ) );
     assert( is_state_cube( t ) );
-    assert( level >= 2 && level <= depth() ); // Levels 0 and 1 are checked separately
+    assert( po.level() >= 2 && po.level() <= depth() ); // Levels 0 and 1 are checked separately
 
     if ( _consecution_solver
             .query()
-            .assume( activators_from( level - 1 ) )
+            .assume( activators_from( po.level() - 1 ) )
             .assume( s )
             .assume( prime( t ) )
             .is_sat() )
-        return cube{ uncircle( _consecution_solver.get_model( _middle_state_vars ) ), is_sorted };
-    else
-        return {};
+    {
+        auto u = cube{ uncircle( _consecution_solver.get_model( _middle_state_vars ) ), is_sorted };
+
+        assert( is_state_cube( u.literals() ) );
+        assert( !cex.left.has_value() );
+        assert( !cex.right.has_value() );
+
+        // TODO: Copying of the state cubes, see above.
+        const auto left = _cexes.make( cex.s_state_vars, u );
+        const auto right = _cexes.make( std::move( u ), cex.t_state_vars );
+
+        cex.left = left;
+        cex.right = right;
+
+        return std::pair
+        {
+            proof_obligation{ left, po.level() - 1 },
+            proof_obligation{ right, po.level() - 1 }
+        };
+    }
+
+    return {};
 }
 
 void verifier::block_arrow_at( const cube& s, const cube& t, int level, int start_from /* = 1 */ )

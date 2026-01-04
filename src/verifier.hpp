@@ -212,7 +212,7 @@ private:
 
     bool has_concrete_edge( cex_entry& cex );
     bool has_path_of_length_two( cex_entry& cex );
-    std::optional< cube > has_middle_state( std::span< const literal > s, std::span< const literal > t, int level );
+    std::optional< std::pair< proof_obligation, proof_obligation > > split_in_the_middle( const proof_obligation& po );
 
     void block_arrow_at( const cube& s, const cube& t, int level, int start_from = 1 );
 
