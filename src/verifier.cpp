@@ -56,7 +56,6 @@ void verifier::initialize()
     const auto activated_left_trans = _left_trans.activate( _left_trans_activator.var() );
     const auto activated_right_trans = _right_trans.activate( _right_trans_activator.var() );
 
-    // TODO: Do we want all this in the consecution solver? Consider splitting.
     _consecution_solver.assert_formula( activated_trans );
     _consecution_solver.assert_formula( activated_left_trans );
     _consecution_solver.assert_formula( activated_right_trans );
