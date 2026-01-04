@@ -112,7 +112,7 @@ public:
         }
     };
 
-    solver() : _solver{ std::make_unique< CaDiCaL::Solver >() } {};
+    solver() : _solver{ std::make_unique< CaDiCaL::Solver >() } {}
 
     void reset()
     {
@@ -143,7 +143,7 @@ public:
         val.reserve( range.size() );
 
         for ( const auto var : range )
-            val.emplace_back( var, !is_true_in_model( var ) );
+            val.emplace_back( var, is_true_in_model( var ) );
 
         return val;
     }
