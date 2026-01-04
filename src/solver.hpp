@@ -104,6 +104,12 @@ public:
 
             return res == CaDiCaL::SATISFIABLE;
         }
+
+        [[nodiscard]]
+        bool is_unsat()
+        {
+            return !is_sat();
+        }
     };
 
     solver() : _solver{ std::make_unique< CaDiCaL::Solver >() } {};
