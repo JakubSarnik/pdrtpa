@@ -175,9 +175,8 @@ bool verifier::solve_obligation( const proof_obligation& po )
     // We need to first check if s /\ TF[ 0 ] /\ t' is satisfiable,
     // where TF[ 0 ] = id \/ T.
 
-    // TODO: As long as we don't generalize states, a syntactic equivalence
-    //       check suffices here.
-    if ( intersects( s, t.literals() ) )
+    // TODO: Change to an intersection check if states are generalized.
+    if ( s.literals() == t.literals() )
         return true;
 
     if ( has_concrete_edge( cex ) )
