@@ -19,6 +19,7 @@ struct cex_entry
 };
 
 // TODO: Make this safer and/or more efficient?
+// TODO: Better yet, try a simple shared_ptr structure...
 class cex_pool
 {
     std::vector< cex_entry > _entries;
@@ -201,6 +202,16 @@ private:
         return shift_literals( _middle_state_vars, _system->state_vars(), literals );
     }
 
+    const cube& get_s( const proof_obligation& po )
+    {
+        return _cexes.get( po.handle() ).s_state_vars;
+    }
+
+    const cube& get_t( const proof_obligation& po )
+    {
+        return _cexes.get( po.handle() ).t_state_vars;
+    }
+
     void initialize();
     result_t check();
     result_t check_trivial_cases();
@@ -208,8 +219,8 @@ private:
     std::optional< cex_handle > get_error_cex();
     bool solve_obligation( const proof_obligation& po );
 
-    bool has_concrete_edge( cex_entry& cex );
-    bool has_path_of_length_two( cex_entry& cex );
+    bool has_concrete_edge( const proof_obligation& po );
+    bool has_path_of_length_two( const proof_obligation& po );
     std::optional< std::pair< proof_obligation, proof_obligation > > split_in_the_middle( const proof_obligation& po );
 
     void block_arrow_at( const cube& s, const cube& t, int level, int start_from = 1 );

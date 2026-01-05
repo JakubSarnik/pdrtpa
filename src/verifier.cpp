@@ -168,18 +168,14 @@ bool verifier::solve_obligation( const proof_obligation& po )
 {
     assert( 0 <= po.level() && po.level() <= depth() );
 
-    auto& cex = _cexes.get( po.handle() );
-    const auto& s = cex.s_state_vars;
-    const auto& t = cex.t_state_vars;
-
     // We need to first check if s /\ TF[ 0 ] /\ t' is satisfiable,
     // where TF[ 0 ] = id \/ T.
 
     // TODO: Change to an intersection check if states are generalized.
-    if ( s.literals() == t.literals() )
+    if ( get_s( po ).literals() == get_t( po ).literals() )
         return true;
 
-    if ( has_concrete_edge( cex ) )
+    if ( has_concrete_edge( po ) )
         return true;
 
     // We know from the previous that s /\ TF[ 0 ] /\ t' is unsatisfiable,
@@ -192,7 +188,7 @@ bool verifier::solve_obligation( const proof_obligation& po )
         // TF[ 0 ]( X, X° ) /\ TF[ 0 ]( X°, X' ) /\ s /\ t' now reduces to
         // T( X, Y1, X° ) /\ T( X°, Y2, X' ) /\ s /\ t'.
 
-        if ( has_path_of_length_two( cex ) )
+        if ( has_path_of_length_two( po ) )
             return true;
     }
     else
@@ -215,31 +211,28 @@ bool verifier::solve_obligation( const proof_obligation& po )
     // TODO: Generalize the blocked arrow here!
 
     logger::log_line_debug( "Found a spurious arrow at level {}", po.level() );
-    logger::log_line_debug( "\ts = {}", s.to_string() );
-    logger::log_line_debug( "\tt = {}", t.to_string() );
+    logger::log_line_debug( "\ts = {}", get_s( po ).to_string() );
+    logger::log_line_debug( "\tt = {}", get_t( po ).to_string() );
 
-    block_arrow_at( s, t, po.level() );
+    block_arrow_at( get_s( po ), get_t( po ), po.level() );
 
     return false;
 }
 
-bool verifier::has_concrete_edge( cex_entry& cex )
+bool verifier::has_concrete_edge( const proof_obligation& po )
 {
-    const auto& s = cex.s_state_vars.literals();
-    const auto& t = cex.t_state_vars.literals();
-
-    assert( is_state_cube( s ) );
-    assert( is_state_cube( t ) );
+    assert( is_state_cube( get_s( po ).literals() ) );
+    assert( is_state_cube( get_t( po ).literals() ) );
 
     if ( _consecution_solver
             .query()
             .assume( _trans_activator )
-            .assume( s )
-            .assume( prime( t ) )
+            .assume( get_s( po ).literals() )
+            .assume( prime( get_t( po ).literals() ) )
             .is_sat() )
     {
         assert( !cex.input_vars.has_value() );
-        cex.input_vars = cube{ _consecution_solver.get_model( _system->input_vars() ), is_sorted };
+        _cexes.get( po.handle() ).input_vars = cube{ _consecution_solver.get_model( _system->input_vars() ), is_sorted };
 
         return true;
     }
@@ -247,20 +240,17 @@ bool verifier::has_concrete_edge( cex_entry& cex )
     return false;
 }
 
-bool verifier::has_path_of_length_two( cex_entry& cex )
+bool verifier::has_path_of_length_two( const proof_obligation& po )
 {
-    const auto& s = cex.s_state_vars.literals();
-    const auto& t = cex.t_state_vars.literals();
-
-    assert( is_state_cube( s ) );
-    assert( is_state_cube( t ) );
+    assert( is_state_cube( get_s( po ).literals() ) );
+    assert( is_state_cube( get_t( po ).literals() ) );
 
     if ( _consecution_solver
             .query()
             .assume( _left_trans_activator )
             .assume( _right_trans_activator )
-            .assume( s )
-            .assume( prime( t ) )
+            .assume( get_s( po ).literals() )
+            .assume( prime( get_t( po ).literals() ) )
             .is_sat() )
     {
         auto middle_state = cube{ uncircle( _consecution_solver.get_model( _middle_state_vars ) ), is_sorted };
@@ -271,9 +261,9 @@ bool verifier::has_path_of_length_two( cex_entry& cex )
 
         // TODO: Copying of the state cubes here is a bit ugly. Can't
         //       we store cubes in a pool?
-        cex.left = _cexes.make( cex.s_state_vars, middle_state,
+        _cexes.get( po.handle() ).left = _cexes.make( get_s( po ), middle_state,
             cube{ _consecution_solver.get_model( _left_input_vars ), is_sorted } );
-        cex.right = _cexes.make( std::move( middle_state ), cex.t_state_vars,
+        _cexes.get( po.handle() ).right = _cexes.make( std::move( middle_state ), get_t( po ),
             cube{ _consecution_solver.get_model( _right_input_vars ), is_sorted } );
 
         return true;
@@ -285,33 +275,29 @@ bool verifier::has_path_of_length_two( cex_entry& cex )
 auto verifier::split_in_the_middle( const proof_obligation& po )
     -> std::optional< std::pair< proof_obligation, proof_obligation > >
 {
-    auto& cex = _cexes.get( po.handle() );
-    const auto& s = cex.s_state_vars.literals();
-    const auto& t = cex.t_state_vars.literals();
-
-    assert( is_state_cube( s ) );
-    assert( is_state_cube( t ) );
+    assert( is_state_cube( get_s( po ).literals() ) );
+    assert( is_state_cube( get_t( po ).literals() ) );
     assert( po.level() >= 2 && po.level() <= depth() ); // Levels 0 and 1 are checked separately
 
     if ( _consecution_solver
             .query()
             .assume( activators_from( po.level() - 1 ) )
-            .assume( s )
-            .assume( prime( t ) )
+            .assume( get_s( po ).literals() )
+            .assume( prime( get_t( po ).literals() ) )
             .is_sat() )
     {
         auto u = cube{ uncircle( _consecution_solver.get_model( _middle_state_vars ) ), is_sorted };
 
         assert( is_state_cube( u.literals() ) );
-        assert( !cex.left.has_value() );
-        assert( !cex.right.has_value() );
+        //assert( !cex.left.has_value() );
+        //assert( !cex.right.has_value() );
 
         // TODO: Copying of the state cubes, see above.
-        const auto left = _cexes.make( cex.s_state_vars, u );
-        const auto right = _cexes.make( std::move( u ), cex.t_state_vars );
+        const auto left = _cexes.make( get_s( po ), u );
+        const auto right = _cexes.make( std::move( u ), get_t( po ) );
 
-        cex.left = left;
-        cex.right = right;
+        _cexes.get( po.handle() ).left = left;
+        _cexes.get( po.handle() ).right = right;
 
         return std::pair
         {
