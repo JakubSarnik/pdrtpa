@@ -231,7 +231,7 @@ bool verifier::has_concrete_edge( const proof_obligation& po )
             .assume( prime( get_t( po ).literals() ) )
             .is_sat() )
     {
-        assert( !cex.input_vars.has_value() );
+        assert( !get_inputs( po ).has_value() );
         _cexes.get( po.handle() ).input_vars = cube{ _consecution_solver.get_model( _system->input_vars() ), is_sorted };
 
         return true;
@@ -256,8 +256,6 @@ bool verifier::has_path_of_length_two( const proof_obligation& po )
         auto middle_state = cube{ uncircle( _consecution_solver.get_model( _middle_state_vars ) ), is_sorted };
 
         assert( is_state_cube( middle_state.literals() ) );
-        assert( !cex.left.has_value() );
-        assert( !cex.right.has_value() );
 
         // TODO: Copying of the state cubes here is a bit ugly. Can't
         //       we store cubes in a pool?
@@ -289,8 +287,6 @@ auto verifier::split_in_the_middle( const proof_obligation& po )
         auto u = cube{ uncircle( _consecution_solver.get_model( _middle_state_vars ) ), is_sorted };
 
         assert( is_state_cube( u.literals() ) );
-        //assert( !cex.left.has_value() );
-        //assert( !cex.right.has_value() );
 
         // TODO: Copying of the state cubes, see above.
         const auto left = _cexes.make( get_s( po ), u );

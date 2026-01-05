@@ -212,6 +212,11 @@ private:
         return _cexes.get( po.handle() ).t_state_vars;
     }
 
+    const std::optional< cube >& get_inputs( const proof_obligation& po )
+    {
+        return _cexes.get( po.handle() ).input_vars;
+    }
+
     void initialize();
     result_t check();
     result_t check_trivial_cases();
