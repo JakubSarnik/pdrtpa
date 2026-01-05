@@ -355,6 +355,9 @@ public:
 
     [[nodiscard]] std::string to_string() const
     {
+        if ( _literals.empty() )
+            return "⊤";
+
         auto res = std::string{};
         const auto* sep = "";
 
