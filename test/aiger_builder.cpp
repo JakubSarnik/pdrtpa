@@ -1,27 +1,11 @@
 #include "common.hpp"
+#include "aiger.hpp"
 #include "aiger_builder.hpp"
 
 using namespace builder;
 
 namespace
 {
-
-using aiger_ptr = std::unique_ptr< aiger, decltype( &aiger_reset ) >;
-
-aiger_ptr make_aiger()
-{
-    return { aiger_init(), &aiger_reset };
-}
-
-aiger_ptr read_aiger( const char* str )
-{
-    auto aig = make_aiger();
-    const auto* const err = aiger_read_from_string( aig.get(), str );
-
-    REQUIRE( err == nullptr );
-
-    return aig;
-}
 
 struct expected_system
 {
