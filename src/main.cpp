@@ -1,4 +1,4 @@
-#include "aiger.h"
+#include "aiger.hpp"
 #include "logic.hpp"
 #include "transition_system.hpp"
 #include "logger.hpp"
@@ -15,13 +15,6 @@ namespace
 
 constexpr const char* help_content =
     "Usage: pdrtpa [-v | --verbose] [-d | --debug] <input.aig>";
-
-using aiger_ptr = std::unique_ptr< aiger, decltype( &aiger_reset ) >;
-
-aiger_ptr make_aiger()
-{
-    return { aiger_init(), &aiger_reset };
-}
 
 std::string format_witness( const transition_system& sys, const verifier::result_t& counterexample )
 {
