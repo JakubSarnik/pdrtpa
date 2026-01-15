@@ -2,18 +2,28 @@
 #include "logger.hpp"
 #include <functional>
 #include <queue>
+#include <algorithm>
 
 namespace
 {
 
-// TODO: Consider adding a more efficient implementation for two cubes.
-bool intersects( const cube& c, std::span< const literal > d )
+std::optional< literal > find_splitter_sorted( std::span< const literal > c, std::span< const literal > d )
 {
-    for ( const auto lit : d )
-        if ( c.contains( !lit ) )
-            return false;
+    assert( std::ranges::is_sorted( c, cube_literal_lt ) );
+    assert( std::ranges::is_sorted( d, cube_literal_lt ) );
 
-    return true;
+    // TODO: Make this linear
+
+    for ( const auto lit : c )
+        if ( std::ranges::binary_search( d, !lit, cube_literal_lt ) )
+            return lit;
+
+    return {};
+}
+
+bool intersects_sorted( std::span< const literal > c, std::span< const literal > d )
+{
+    return !find_splitter_sorted( c, d ).has_value();
 }
 
 cube sorted_cube_union( std::span< const literal > a, std::span< const literal > b )
@@ -185,15 +195,15 @@ bool verifier::solve_obligation( const proof_obligation& po )
 
     if ( po.level() == 1 )
     {
-        // TF[ 0 ]( X, X° ) /\ TF[ 0 ]( X°, X' ) /\ s /\ t' now reduces to
-        // T( X, Y1, X° ) /\ T( X°, Y2, X' ) /\ s /\ t'.
+        // s /\ TF[ 0 ]( X, X° ) /\ TF[ 0 ]( X°, X' ) /\ t' now reduces to
+        // s /\ T( X, Y1, X° ) /\ T( X°, Y2, X' ) /\ t'.
 
         if ( has_path_of_length_two( po ) )
             return true;
     }
     else
     {
-        // TF[ k - 1 ]( X, X° ) /\ TF[ k - 1 ]( X°, X' ) /\ s /\ t'
+        // s /\ TF[ k - 1 ]( X, X° ) /\ TF[ k - 1 ]( X°, X' ) /\ t'
 
         auto pair = split_in_the_middle( po );
 
@@ -208,13 +218,12 @@ bool verifier::solve_obligation( const proof_obligation& po )
         }
     }
 
-    // TODO: Generalize the blocked arrow here!
+    const auto [ c, d ] = generalize_blocked_arrow( get_s( po ), get_t( po ), po.level() );
 
-    logger::log_line_debug( "Found a spurious arrow at level {}", po.level() );
-    logger::log_line_debug( "\ts = {}", get_s( po ).to_string() );
-    logger::log_line_debug( "\tt = {}", get_t( po ).to_string() );
+    logger::log_line_debug( "{}: c = {}", po.level(), c.to_string() );
+    logger::log_line_debug( "{}  d = {}", std::string( std::to_string( po.level() ).size(), ' '), d.to_string() );
 
-    block_arrow_at( get_s( po ), get_t( po ), po.level() );
+    block_arrow_at( c, d, po.level() );
 
     return false;
 }
@@ -305,6 +314,55 @@ auto verifier::split_in_the_middle( const proof_obligation& po )
     return {};
 }
 
+std::pair< cube, cube > verifier::generalize_blocked_arrow( const cube& s, const cube& t, int level )
+{
+    // We know that:
+    // - s /\ TF[ 0 ] /\ t' is unsatisfiable, i.e.
+    //   - s != t,
+    //   - s /\ T( X, X' ) /\ t' is unsatisfiable, and
+    // - s /\ TF[ k - 1 ]( X, X° ) /\ TF[ k - 1 ]( X°, X' ) /\ t' is
+    //   unsatisfiable (and this was the last call, where k = level).
+    // We need to produce subcubes c of s and d of t such that the previous
+    // two formulae are still unsatisfiable when c is substituted for s
+    // and d for t.
+
+    assert( 1 <= level && level <= depth() );
+    assert( is_state_cube( s.literals() ) );
+    assert( is_state_cube( t.literals() ) );
+
+    auto c = _consecution_solver.get_core( s.literals() );
+    auto d = _consecution_solver.get_core_mapped( t.literals(), [ & ]( literal lit ){ return prime( lit ); } );
+
+    // Cores ensure that
+    //   c /\ TF[ k - 1 ]( X, X° ) /\ TF[ k - 1 ]( X°, X' ) /\ d'
+    // is unsatisfiable. We now need to make sure that
+    //   1. No state is in both c and d (i.e. c and d have empty intersection),
+    //   2. No state in c can reach a state in d in one step.
+
+    if ( intersects_sorted( c, d ) )
+    {
+        // Break the intersection by finding the first state variable that
+        // occurs in s and t in different polarities (which must exist, since
+        // otherwise we would have s = t) and appending the two separate
+        // polarities to both c and d.
+
+        const auto diff = find_splitter_sorted( s.literals(), t.literals() );
+        assert( diff.has_value() );
+
+        c.insert( std::ranges::upper_bound( c, *diff, cube_literal_lt ), *diff );
+        d.insert( std::ranges::upper_bound( d, !*diff, cube_literal_lt ), !*diff );
+    }
+
+    assert( !intersects_sorted( c, d ) );
+
+    // Now we only need to ensure that s /\ T( X, X' ) /\ t' is unsatisfiable.
+
+    // TODO
+
+    return { cube{ std::move( c ), is_sorted }, cube{ std::move( d ), is_sorted } };
+}
+
+// TODO: Take by value and move?
 void verifier::block_arrow_at( const cube& s, const cube& t, int level, int start_from /* = 1 */ )
 {
     assert( 1 <= level && level <= depth() );

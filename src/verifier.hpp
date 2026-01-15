@@ -182,6 +182,11 @@ private:
         return lits;
     }
 
+    [[nodiscard]] literal prime( literal lit ) const
+    {
+        return shift_literal( _system->state_vars(), _system->next_state_vars(), lit );
+    }
+
     [[nodiscard]] std::vector< literal > prime( std::span< const literal > literals ) const
     {
         return shift_literals( _system->state_vars(), _system->next_state_vars(), literals );
@@ -192,14 +197,29 @@ private:
         return shift_literals( _system->state_vars(), _middle_state_vars, literals );
     }
 
+    [[nodiscard]] literal circle( literal lit ) const
+    {
+        return shift_literal( _system->state_vars(), _middle_state_vars, lit );
+    }
+
     [[nodiscard]] std::vector< literal > unprime( std::span< const literal > literals ) const
     {
         return shift_literals( _system->next_state_vars(), _system->state_vars(), literals );
     }
 
+    [[nodiscard]] literal unprime( literal lit ) const
+    {
+        return shift_literal( _system->next_state_vars(), _system->state_vars(), lit );
+    }
+
     [[nodiscard]] std::vector< literal > uncircle( std::span< const literal > literals ) const
     {
         return shift_literals( _middle_state_vars, _system->state_vars(), literals );
+    }
+
+    [[nodiscard]] literal uncircle( literal lit ) const
+    {
+        return shift_literal( _middle_state_vars, _system->state_vars(), lit );
     }
 
     const cube& get_s( const proof_obligation& po )
@@ -228,6 +248,7 @@ private:
     bool has_path_of_length_two( const proof_obligation& po );
     std::optional< std::pair< proof_obligation, proof_obligation > > split_in_the_middle( const proof_obligation& po );
 
+    std::pair< cube, cube > generalize_blocked_arrow( const cube& s, const cube& t, int level );
     void block_arrow_at( const cube& s, const cube& t, int level, int start_from = 1 );
 
     std::vector< std::vector< literal > > build_counterexample( cex_handle root );

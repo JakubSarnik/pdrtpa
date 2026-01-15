@@ -170,6 +170,19 @@ public:
     }
 
     [[nodiscard]]
+    std::vector< literal > get_core_mapped( std::span< const literal > literals,
+                                            const std::regular_invocable< literal > auto& f )
+    {
+        auto core = std::vector< literal >{};
+
+        for ( const auto lit : literals )
+            if ( is_in_core( f( lit ) ) )
+                core.emplace_back( lit );
+
+        return core;
+    }
+
+    [[nodiscard]]
     std::vector< literal > get_core( variable_range variables )
     {
         auto core = std::vector< literal >{};
