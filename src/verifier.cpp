@@ -444,23 +444,28 @@ bool verifier::propagate()
     assert( depth() < _trace_blocked_arrows.size() );
     assert( _trace_blocked_arrows[ depth() ].empty() );
 
+    // If
+    //   c /\ TF[ k - 1 ]( X, X° ) /\ TF[ k - 1 ]( X°, X' ) /\ d'
+    // is unsatisfiable, we can push (c, d') to TF[ k ].
+
     for ( int i = 1; i < depth(); ++i )
     {
         // The copy is done since the _trace_blocked_arrows[ i ] will be changed
         // during the forthcoming iteration.
         const auto arrows = _trace_blocked_arrows[ i ];
 
-        for ( const auto& [ s, t ] : arrows )
+        for ( const auto& [ c, d ] : arrows )
         {
             if ( _consecution_solver
                     .query()
                     .assume( activators_from( i ) )
-                    .assume( s.literals() )
-                    .assume( prime( t.literals() ) )
+                    .assume( c.literals() )
+                    .assume( prime( d.literals() ) )
                     .is_unsat() )
             {
-                // TODO: Generalization? (E.g. as in generalize_from_core in PDR).
-                block_arrow_at( s, t, i + 1, i );
+                // TODO: Further generalization from core?
+                //       (E.g. as in generalize_from_core in PDR).
+                block_arrow_at( c, d, i + 1, i );
             }
         }
 
