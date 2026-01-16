@@ -355,9 +355,44 @@ std::pair< cube, cube > verifier::generalize_blocked_arrow( const cube& s, const
 
     assert( !intersects_sorted( c, d ) );
 
-    // Now we only need to ensure that s /\ T( X, X' ) /\ t' is unsatisfiable.
+    // Now we only need to ensure that c /\ T( X, Y, X' ) /\ d' is unsatisfiable.
 
-    // TODO
+    if ( _consecution_solver
+            .query()
+            .assume( _trans_activator )
+            .assume( c )
+            .assume( prime( d ) )
+            .is_sat() )
+    {
+        assert( false && "Generalization not implemented!" );
+        // TODO
+    }
+
+    // The formula
+    //   c /\ TF[ k - 1 ]( X, X° ) /\ TF[ k - 1 ]( X°, X' ) /\ d'
+    // must still be unsatisfiable.
+
+    // TODO: Bleh, somehow deduplicate this! (See also
+    //       has_path_of_length_two vs split_in_the_middle).
+    if ( level == 1 )
+    {
+        assert( _consecution_solver
+                    .query()
+                    .assume( _left_trans_activator )
+                    .assume( _right_trans_activator )
+                    .assume( c )
+                    .assume( prime( d ) )
+                    .is_unsat() );
+    }
+    else
+    {
+        assert( _consecution_solver
+                    .query()
+                    .assume( activators_from( level - 1 ) )
+                    .assume( c )
+                    .assume( prime( d ) )
+                    .is_unsat() );
+    }
 
     return { cube{ std::move( c ), is_sorted }, cube{ std::move( d ), is_sorted } };
 }
