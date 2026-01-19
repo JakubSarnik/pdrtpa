@@ -405,7 +405,7 @@ void verifier::block_arrow_at( const cube& s, const cube& t, int level, int star
     assert( is_state_cube( s.literals() ) );
     assert( is_state_cube( t.literals() ) );
 
-    for ( int d = start_from; d <= depth(); ++d )
+    for ( int d = start_from; d <= level; ++d )
     {
         auto& arrows = _trace_blocked_arrows[ d ];
 
