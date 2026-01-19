@@ -3,6 +3,7 @@
 #include "transition_system.hpp"
 #include "aiger_builder.hpp"
 #include "verifier.hpp"
+#include <algorithm>
 
 namespace
 {
@@ -190,4 +191,39 @@ TEST_CASE( "Unsafe state is not reachable in a two state system" )
     const auto cex = checker.run();
 
     REQUIRE( !cex.has_value() );
+}
+
+TEST_CASE( "Simple counter with an error after 16 steps" )
+{
+    const auto* const str =
+        "aag 16 0 4 0 12 1\n"
+        "2 18\n"
+        "4 22\n"
+        "6 26\n"
+        "8 9\n"
+        "32\n"
+        "10 8 6\n"
+        "12 10 4\n"
+        "14 12 2\n"
+        "16 13 3\n"
+        "18 17 15\n"
+        "20 11 5\n"
+        "22 21 13\n"
+        "24 9 7\n"
+        "26 25 11\n"
+        "28 4 2\n"
+        "30 28 6\n"
+        "32 30 8\n";
+
+    auto store = variable_store{};
+    const auto system = system_from_aiger( store, str );
+
+    auto checker = verifier{ store, system };
+    const auto cex = checker.run();
+
+    REQUIRE( cex.has_value() );
+    REQUIRE( cex->size() == 16 );
+
+    REQUIRE( system.initial_cube() == std::vector< bool >( 4, false ) );
+    REQUIRE( std::ranges::all_of( *cex, []( const std::vector< literal >& inputs ){ return inputs.empty(); } ) );
 }
