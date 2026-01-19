@@ -37,6 +37,12 @@ cube sorted_cube_union( std::span< const literal > a, std::span< const literal >
     return cube{ std::move( lits ), is_sorted };
 }
 
+void sorted_insert( std::vector< literal >& lits, literal lit )
+{
+    assert( std::ranges::is_sorted( lits, cube_literal_lt ) );
+    lits.insert( std::ranges::upper_bound( lits, lit, cube_literal_lt ), lit );
+}
+
 }
 
 auto verifier::run() -> result_t
@@ -332,6 +338,8 @@ std::pair< cube, cube > verifier::generalize_blocked_arrow( const cube& s, const
     assert( is_state_cube( s.literals() ) );
     assert( is_state_cube( t.literals() ) );
 
+    // return { s, t };
+
     auto c = _consecution_solver.get_core( s.literals() );
     auto d = _consecution_solver.get_core_mapped( t.literals(), [ & ]( literal lit ){ return prime( lit ); } );
 
@@ -351,24 +359,48 @@ std::pair< cube, cube > verifier::generalize_blocked_arrow( const cube& s, const
         const auto diff = find_splitter_sorted( s.literals(), t.literals() );
         assert( diff.has_value() );
 
-        c.insert( std::ranges::upper_bound( c, *diff, cube_literal_lt ), *diff );
-        d.insert( std::ranges::upper_bound( d, !*diff, cube_literal_lt ), !*diff );
+        sorted_insert( c, *diff );
+        sorted_insert( d, !*diff );
     }
 
     assert( !intersects_sorted( c, d ) );
 
     // Now we only need to ensure that c /\ T( X, Y, X' ) /\ d' is unsatisfiable.
 
-    if ( _consecution_solver
-            .query()
-            .assume( _trans_activator )
-            .assume( c )
-            .assume( prime( d ) )
-            .is_sat() )
+    auto add_to_c = std::bernoulli_distribution{ 0.5 };
+
+    while ( _consecution_solver
+                .query()
+                .assume( _trans_activator )
+                .assume( c )
+                .assume( prime( d ) )
+                .is_sat() )
     {
-        assert( false && "Generalization not implemented!" );
-        // TODO
+        const auto ss = _consecution_solver.get_model( _system->state_vars() );
+        const auto tt = unprime( _consecution_solver.get_model( _system->next_state_vars() ) );
+
+        const auto c_conflict = find_splitter_sorted( s.literals(), ss );
+        const auto d_conflict = find_splitter_sorted( t.literals(), tt );
+
+        if ( c_conflict.has_value() && d_conflict.has_value() )
+        {
+            if ( add_to_c( _random ) )
+                sorted_insert( c, *c_conflict );
+            else
+                sorted_insert( d, *d_conflict );
+        }
+        else if ( c_conflict.has_value() )
+        {
+            sorted_insert( c, *c_conflict );
+        }
+        else
+        {
+            assert( d_conflict.has_value() );
+            sorted_insert( d, *d_conflict );
+        }
     }
+
+    assert( !intersects_sorted( c, d ) );
 
     // The formula
     //   c /\ TF[ k - 1 ]( X, X° ) /\ TF[ k - 1 ]( X°, X' ) /\ d'
