@@ -254,6 +254,8 @@ bool verifier::has_path_of_length_two( const proof_obligation& po )
     assert( is_state_cube( get_s( po ).literals() ) );
     assert( is_state_cube( get_t( po ).literals() ) );
 
+    // TODO: Left and right trans could be both activated by the 0 frame activator?
+
     if ( _consecution_solver
             .query()
             .assume( _left_trans_activator )
