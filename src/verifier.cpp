@@ -369,6 +369,7 @@ std::pair< cube, cube > verifier::generalize_blocked_arrow( const cube& s, const
 
     auto add_to_c = std::bernoulli_distribution{ 0.5 };
 
+    // TODO: Maybe don't keep c and d sorted and only sort at the end
     while ( _consecution_solver
                 .query()
                 .assume( _trans_activator )
