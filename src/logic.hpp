@@ -28,6 +28,15 @@ public:
     friend auto operator<=>( variable, variable ) = default;
 };
 
+template<>
+struct std::hash< variable >
+{
+    std::size_t operator()( const variable& var ) const noexcept
+    {
+        return std::hash< int >{}( var.id() );
+    }
+};
+
 class variable_range
 {
     friend class variable_store;
@@ -164,6 +173,15 @@ public:
             return std::to_string( _value );
         else
             return std::format( "¬{}", std::abs( _value ) );
+    }
+};
+
+template<>
+struct std::hash< literal >
+{
+    std::size_t operator()( const literal& lit ) const noexcept
+    {
+        return std::hash< int >{}( lit.value() );
     }
 };
 
