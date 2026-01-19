@@ -7,7 +7,7 @@
 namespace
 {
 
-std::optional< literal > find_splitter_sorted( std::span< const literal > c, std::span< const literal > d )
+std::optional< literal > find_conflict_sorted( std::span< const literal > c, std::span< const literal > d )
 {
     assert( std::ranges::is_sorted( c, cube_literal_lt ) );
     assert( std::ranges::is_sorted( d, cube_literal_lt ) );
@@ -23,10 +23,10 @@ std::optional< literal > find_splitter_sorted( std::span< const literal > c, std
 
 bool intersects_sorted( std::span< const literal > c, std::span< const literal > d )
 {
-    return !find_splitter_sorted( c, d ).has_value();
+    return !find_conflict_sorted( c, d ).has_value();
 }
 
-cube sorted_cube_union( std::span< const literal > a, std::span< const literal > b )
+cube union_sorted( std::span< const literal > a, std::span< const literal > b )
 {
     assert( std::ranges::is_sorted( a, cube_literal_lt ) );
     assert( std::ranges::is_sorted( b, cube_literal_lt ) );
@@ -37,7 +37,7 @@ cube sorted_cube_union( std::span< const literal > a, std::span< const literal >
     return cube{ std::move( lits ), is_sorted };
 }
 
-void sorted_insert( std::vector< literal >& lits, literal lit )
+void insert_sorted( std::vector< literal >& lits, literal lit )
 {
     assert( std::ranges::is_sorted( lits, cube_literal_lt ) );
     lits.insert( std::ranges::upper_bound( lits, lit, cube_literal_lt ), lit );
@@ -356,11 +356,11 @@ std::pair< cube, cube > verifier::generalize_blocked_arrow( const cube& s, const
         // otherwise we would have s = t) and appending the two separate
         // polarities to both c and d.
 
-        const auto diff = find_splitter_sorted( s.literals(), t.literals() );
+        const auto diff = find_conflict_sorted( s.literals(), t.literals() );
         assert( diff.has_value() );
 
-        sorted_insert( c, *diff );
-        sorted_insert( d, !*diff );
+        insert_sorted( c, *diff );
+        insert_sorted( d, !*diff );
     }
 
     assert( !intersects_sorted( c, d ) );
@@ -379,24 +379,24 @@ std::pair< cube, cube > verifier::generalize_blocked_arrow( const cube& s, const
         const auto ss = _consecution_solver.get_model( _system->state_vars() );
         const auto tt = unprime( _consecution_solver.get_model( _system->next_state_vars() ) );
 
-        const auto c_conflict = find_splitter_sorted( s.literals(), ss );
-        const auto d_conflict = find_splitter_sorted( t.literals(), tt );
+        const auto c_conflict = find_conflict_sorted( s.literals(), ss );
+        const auto d_conflict = find_conflict_sorted( t.literals(), tt );
 
         if ( c_conflict.has_value() && d_conflict.has_value() )
         {
             if ( add_to_c( _random ) )
-                sorted_insert( c, *c_conflict );
+                insert_sorted( c, *c_conflict );
             else
-                sorted_insert( d, *d_conflict );
+                insert_sorted( d, *d_conflict );
         }
         else if ( c_conflict.has_value() )
         {
-            sorted_insert( c, *c_conflict );
+            insert_sorted( c, *c_conflict );
         }
         else
         {
             assert( d_conflict.has_value() );
-            sorted_insert( d, *d_conflict );
+            insert_sorted( d, *d_conflict );
         }
     }
 
@@ -467,9 +467,9 @@ void verifier::block_arrow_at( const cube& s, const cube& t, int level, int star
 
     const auto v = _trace_activators[ level ].var();
 
-    _error_solver.assert_formula( sorted_cube_union( s.literals(), prime( t.literals() ) ).negate().activate( v ) );
-    _consecution_solver.assert_formula( sorted_cube_union( s.literals(), circle( t.literals() ) ).negate().activate( v ) );
-    _consecution_solver.assert_formula( sorted_cube_union( prime( t.literals() ), circle( s.literals() ) ).negate().activate( v ) );
+    _error_solver.assert_formula( union_sorted( s.literals(), prime( t.literals() ) ).negate().activate( v ) );
+    _consecution_solver.assert_formula( union_sorted( s.literals(), circle( t.literals() ) ).negate().activate( v ) );
+    _consecution_solver.assert_formula( union_sorted( prime( t.literals() ), circle( s.literals() ) ).negate().activate( v ) );
 }
 
 std::vector< std::vector< literal > > verifier::build_counterexample( cex_handle root )
