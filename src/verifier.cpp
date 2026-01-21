@@ -56,6 +56,7 @@ cube union_sorted( std::span< const literal > a, std::span< const literal > b )
 {
     assert( std::ranges::is_sorted( a, cube_literal_lt ) );
     assert( std::ranges::is_sorted( b, cube_literal_lt ) );
+    assert( a.empty() || b.empty() || cube_literal_lt( a.back(), b.front() ) );
 
     auto lits = std::vector( a.begin(), a.end() );
     lits.append_range( b );
