@@ -7,16 +7,42 @@
 namespace
 {
 
+// Simple = no repeating variables
+[[maybe_unused]] bool is_sorted_and_simple( std::span< const literal > c )
+{
+    if ( !std::ranges::is_sorted( c, cube_literal_lt ) )
+        return false;
+
+    for ( auto i = 0uz; i < c.size() - 1; ++i )
+    {
+        if ( c[ i ].var() == c[ i + 1 ].var() )
+            return false;
+    }
+
+    return true;
+}
+
 std::optional< literal > find_conflict_sorted( std::span< const literal > c, std::span< const literal > d )
 {
-    assert( std::ranges::is_sorted( c, cube_literal_lt ) );
-    assert( std::ranges::is_sorted( d, cube_literal_lt ) );
+    assert( is_sorted_and_simple( c ) );
+    assert( is_sorted_and_simple( d ) );
 
-    // TODO: Make this linear
+    auto i = 0uz;
+    auto j = 0uz;
 
-    for ( const auto lit : c )
-        if ( std::ranges::binary_search( d, !lit, cube_literal_lt ) )
-            return lit;
+    while ( i < c.size() && j < d.size() )
+    {
+        const auto x = c[ i ];
+        const auto y = d[ j ];
+
+        if ( x == !y )
+            return x;
+
+        if ( cube_literal_lt( x, !y ) )
+            ++i;
+        else // cube_literal_lt( !y, x ) holds
+            ++j;
+    }
 
     return {};
 }
