@@ -338,8 +338,6 @@ std::pair< cube, cube > verifier::generalize_blocked_arrow( const cube& s, const
     assert( is_state_cube( s.literals() ) );
     assert( is_state_cube( t.literals() ) );
 
-    // return { s, t };
-
     auto c = _consecution_solver.get_core( s.literals() );
     auto d = _consecution_solver.get_core_mapped( t.literals(), [ & ]( literal lit ){ return prime( lit ); } );
 
