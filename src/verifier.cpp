@@ -214,7 +214,6 @@ bool verifier::solve_obligation( const proof_obligation& po )
     // We need to first check if s /\ TF[ 0 ] /\ t' is satisfiable,
     // where TF[ 0 ] = id \/ T.
 
-    // TODO: Change to an intersection check if states are generalized.
     if ( get_s( po ).literals() == get_t( po ).literals() )
         return true;
 
