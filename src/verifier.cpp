@@ -7,6 +7,11 @@
 namespace
 {
 
+void sort_literals( std::span< literal > c )
+{
+    std::ranges::sort( c, cube_literal_lt );
+}
+
 // Simple = no repeating variables
 [[maybe_unused]] bool is_sorted_and_simple( std::span< const literal > c )
 {
@@ -67,7 +72,15 @@ cube union_sorted( std::span< const literal > a, std::span< const literal > b )
 void insert_sorted( std::vector< literal >& lits, literal lit )
 {
     assert( std::ranges::is_sorted( lits, cube_literal_lt ) );
-    lits.insert( std::ranges::upper_bound( lits, lit, cube_literal_lt ), lit );
+
+    // TODO: Do a linear search here perhaps?
+
+    const auto it = std::ranges::lower_bound( lits, lit, cube_literal_lt );
+
+    if ( it != lits.end() && *it == lit )
+        return;
+
+    lits.insert( it, lit );
 }
 
 }
@@ -393,7 +406,6 @@ std::pair< cube, cube > verifier::generalize_blocked_arrow( const cube& s, const
 
     auto add_to_c = std::bernoulli_distribution{ 0.5 };
 
-    // TODO: Maybe don't keep c and d sorted and only sort at the end
     while ( _consecution_solver
                 .query()
                 .assume( _trans_activator )
@@ -410,20 +422,23 @@ std::pair< cube, cube > verifier::generalize_blocked_arrow( const cube& s, const
         if ( c_conflict.has_value() && d_conflict.has_value() )
         {
             if ( add_to_c( _random ) )
-                insert_sorted( c, *c_conflict );
+                c.push_back( *c_conflict );
             else
-                insert_sorted( d, *d_conflict );
+                d.push_back( *d_conflict );
         }
         else if ( c_conflict.has_value() )
         {
-            insert_sorted( c, *c_conflict );
+            c.push_back( *c_conflict );
         }
         else
         {
             assert( d_conflict.has_value() );
-            insert_sorted( d, *d_conflict );
+            d.push_back( *d_conflict );
         }
     }
+
+    sort_literals( c );
+    sort_literals( d );
 
     assert( !intersects_sorted( c, d ) );
 
