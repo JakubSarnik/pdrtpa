@@ -112,8 +112,6 @@ private:
     std::vector< std::vector< std::pair< cube, cube > > > _trace_blocked_arrows;
     std::vector< literal > _trace_activators;
     literal _trans_activator; // Activates T(X, Y, X') in _consecution_solver
-    literal _left_trans_activator; // Activates T(X, Y1, X°) in _consecution_solver
-    literal _right_trans_activator; // Activates T(X°, Y2, X') in _consecution_solver
     cex_pool _cexes;
 
     [[nodiscard]] int depth() const
@@ -272,9 +270,7 @@ public:
         _right_aux_vars( store.make_range( system.aux_vars().size() ) ),
         _left_trans{ system.trans().map( [ & ]( literal l ){ return make_left_trans( l ); } ) },
         _right_trans{ system.trans().map( [ & ]( literal l ){ return make_right_trans( l ); } ) },
-        _trans_activator{ store.make() },
-        _left_trans_activator{ store.make() },
-        _right_trans_activator{ store.make() }
+        _trans_activator{ store.make() }
     {}
 
     verifier( const verifier& ) = delete;

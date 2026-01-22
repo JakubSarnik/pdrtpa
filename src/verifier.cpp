@@ -108,9 +108,11 @@ void verifier::initialize()
     _error_solver.assert_formula( _system->init() );
     _error_solver.assert_formula( next_state_error );
 
+    assert( _trace_activators.size() == 1 );
+
     const auto activated_trans = _system->trans().activate( _trans_activator.var() );
-    const auto activated_left_trans = _left_trans.activate( _left_trans_activator.var() );
-    const auto activated_right_trans = _right_trans.activate( _right_trans_activator.var() );
+    const auto activated_left_trans = _left_trans.activate( _trace_activators[ 0 ].var() );
+    const auto activated_right_trans = _right_trans.activate( _trace_activators[ 0 ].var() );
 
     _consecution_solver.assert_formula( activated_trans );
     _consecution_solver.assert_formula( activated_left_trans );
@@ -303,8 +305,7 @@ bool verifier::has_path_of_length_two( const proof_obligation& po )
 
     if ( _consecution_solver
             .query()
-            .assume( _left_trans_activator )
-            .assume( _right_trans_activator )
+            .assume( activators_from( 0 ) )
             .assume( get_s( po ).literals() )
             .assume( prime( get_t( po ).literals() ) )
             .is_sat() )
@@ -332,6 +333,9 @@ auto verifier::split_in_the_middle( const proof_obligation& po )
     assert( is_state_cube( get_s( po ).literals() ) );
     assert( is_state_cube( get_t( po ).literals() ) );
     assert( po.level() >= 2 && po.level() <= depth() ); // Levels 0 and 1 are checked separately
+
+    // TODO: This function and has_path_of_length_two are really similar.
+    //       Deduplicate somehow!
 
     if ( _consecution_solver
             .query()
@@ -446,27 +450,12 @@ std::pair< cube, cube > verifier::generalize_blocked_arrow( const cube& s, const
     //   c /\ TF[ k - 1 ]( X, X° ) /\ TF[ k - 1 ]( X°, X' ) /\ d'
     // must still be unsatisfiable.
 
-    // TODO: Bleh, somehow deduplicate this! (See also
-    //       has_path_of_length_two vs split_in_the_middle).
-    if ( level == 1 )
-    {
-        assert( _consecution_solver
-                    .query()
-                    .assume( _left_trans_activator )
-                    .assume( _right_trans_activator )
-                    .assume( c )
-                    .assume( prime( d ) )
-                    .is_unsat() );
-    }
-    else
-    {
-        assert( _consecution_solver
-                    .query()
-                    .assume( activators_from( level - 1 ) )
-                    .assume( c )
-                    .assume( prime( d ) )
-                    .is_unsat() );
-    }
+    assert( _consecution_solver
+                .query()
+                .assume( activators_from( level - 1 ) )
+                .assume( c )
+                .assume( prime( d ) )
+                .is_unsat() );
 
     return { cube{ std::move( c ), is_sorted }, cube{ std::move( d ), is_sorted } };
 }
