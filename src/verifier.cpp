@@ -258,6 +258,8 @@ bool verifier::solve_obligation( const proof_obligation& po )
         {
             const auto& [ left, right ] = *pair;
 
+            // TODO: It might make sense to choose where to recurse first based
+            //       on e.g. a coin toss or length of the cubes.
             if ( solve_obligation( left ) && solve_obligation( right ) )
                 return true;
 
