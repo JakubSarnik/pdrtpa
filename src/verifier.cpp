@@ -404,7 +404,7 @@ std::pair< cube, cube > verifier::generalize_blocked_arrow( const cube& s, const
 
     // Now we only need to ensure that c /\ T( X, Y, X' ) /\ d' is unsatisfiable.
 
-    auto add_to_c = std::bernoulli_distribution{ 0.5 };
+    auto add_to_c = std::bernoulli_distribution{ 0.5 }; // NOLINT: 0.5 is a self-explanatory probability
 
     while ( _consecution_solver
                 .query()
