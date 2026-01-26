@@ -314,12 +314,18 @@ bool verifier::has_path_of_length_two( const proof_obligation& po )
 
         assert( is_state_cube( middle_state.literals() ) );
 
+        auto get_inputs = [ & ]( variable_range original_range )
+        {
+            return shift_literals( original_range, _system->input_vars(),
+                _consecution_solver.get_model( original_range ) );
+        };
+
         // TODO: Copying of the state cubes here is a bit ugly. Can't
         //       we store cubes in a pool?
         _cexes.get( po.handle() ).left = _cexes.make( get_s( po ), middle_state,
-            cube{ _consecution_solver.get_model( _left_input_vars ), is_sorted } );
+            cube{ get_inputs( _left_input_vars ), is_sorted } );
         _cexes.get( po.handle() ).right = _cexes.make( std::move( middle_state ), get_t( po ),
-            cube{ _consecution_solver.get_model( _right_input_vars ), is_sorted } );
+            cube{ get_inputs( _right_input_vars ), is_sorted } );
 
         return true;
     }
