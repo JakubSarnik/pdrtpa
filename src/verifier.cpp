@@ -18,6 +18,9 @@ void sort_literals( std::span< literal > c )
     if ( !std::ranges::is_sorted( c, cube_literal_lt ) )
         return false;
 
+    if ( c.empty() )
+        return true;
+
     for ( auto i = 0uz; i < c.size() - 1; ++i )
     {
         if ( c[ i ].var() == c[ i + 1 ].var() )
