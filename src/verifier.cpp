@@ -469,7 +469,6 @@ std::pair< cube, cube > verifier::generalize_blocked_arrow( const cube& s, const
     return { cube{ std::move( c ), is_sorted }, cube{ std::move( d ), is_sorted } };
 }
 
-// TODO: Take by value and move?
 void verifier::block_arrow_at( const cube& s, const cube& t, int level, int start_from /* = 1 */ )
 {
     assert( 1 <= level && level <= depth() );
