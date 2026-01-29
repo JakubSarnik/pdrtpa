@@ -259,9 +259,9 @@ private:
     [[nodiscard]] [[maybe_unused]] bool is_state_cube( std::span< const literal > literals ) const;
 
 public:
-    explicit verifier( variable_store& store, const transition_system& system ) :
+    explicit verifier( variable_store& store, const transition_system& system, unsigned int seed ) :
         _store{ &store },
-        _random{ std::random_device{}() },
+        _random{ seed },
         _system{ &system },
         _init_cube{ system.init().as_cube() },
         _middle_state_vars{ store.make_range( system.state_vars().size() ) },

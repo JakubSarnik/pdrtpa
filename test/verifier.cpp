@@ -8,6 +8,8 @@
 namespace
 {
 
+constexpr unsigned int seed = 0x55555555;
+
 transition_system system_from_aiger( variable_store& store, const char* str )
 {
     auto aig = read_aiger( str );
@@ -31,7 +33,7 @@ TEST_CASE( "System with an unsafe initial state" )
     auto store = variable_store{};
     const auto system = system_from_aiger( store, str );
 
-    auto checker = verifier{ store, system };
+    auto checker = verifier{ store, system, seed };
     const auto cex = checker.run();
 
     REQUIRE( cex.has_value() );
@@ -51,7 +53,7 @@ TEST_CASE( "Unsafe when input is true in the initial state" )
     auto store = variable_store{};
     const auto system = system_from_aiger( store, str );
 
-    auto checker = verifier{ store, system };
+    auto checker = verifier{ store, system, seed };
     const auto cex = checker.run();
 
     const auto i = literal{ system.input_vars().nth( 0 ) };
@@ -73,7 +75,7 @@ TEST_CASE( "Unsafe when input is false in the initial state" )
     auto store = variable_store{};
     const auto system = system_from_aiger( store, str );
 
-    auto checker = verifier{ store, system };
+    auto checker = verifier{ store, system, seed };
     const auto cex = checker.run();
 
     const auto i = literal{ system.input_vars().nth( 0 ) };
@@ -94,7 +96,7 @@ TEST_CASE( "Unsafe state reached in one step" )
     auto store = variable_store{};
     const auto system = system_from_aiger( store, str );
 
-    auto checker = verifier{ store, system };
+    auto checker = verifier{ store, system, seed };
     const auto cex = checker.run();
 
     // Actually technically two steps, the first brings us from 0 to 1 and
@@ -132,7 +134,7 @@ TEST_CASE( "Unsafe four state system" )
     auto store = variable_store{};
     const auto system = system_from_aiger( store, str );
 
-    auto checker = verifier{ store, system };
+    auto checker = verifier{ store, system, seed };
     const auto cex = checker.run();
 
     const auto i = literal{ system.input_vars().nth( 0 ) };
@@ -170,7 +172,7 @@ TEST_CASE( "Trivially safe four state system" )
     auto store = variable_store{};
     const auto system = system_from_aiger( store, str );
 
-    auto checker = verifier{ store, system };
+    auto checker = verifier{ store, system, seed };
     const auto cex = checker.run();
 
     REQUIRE( !cex.has_value() );
@@ -187,7 +189,7 @@ TEST_CASE( "Unsafe state is not reachable in a two state system" )
     auto store = variable_store{};
     const auto system = system_from_aiger( store, str );
 
-    auto checker = verifier{ store, system };
+    auto checker = verifier{ store, system, seed };
     const auto cex = checker.run();
 
     REQUIRE( !cex.has_value() );
@@ -218,7 +220,7 @@ TEST_CASE( "Simple counter with an error after 16 steps" )
     auto store = variable_store{};
     const auto system = system_from_aiger( store, str );
 
-    auto checker = verifier{ store, system };
+    auto checker = verifier{ store, system, seed };
     const auto cex = checker.run();
 
     REQUIRE( cex.has_value() );
@@ -338,7 +340,7 @@ TEST_CASE( "Simple unsafe HWMCC benchmark" )
     auto store = variable_store{};
     const auto system = system_from_aiger( store, str );
 
-    auto checker = verifier{ store, system };
+    auto checker = verifier{ store, system, seed };
     const auto cex = checker.run();
 
     REQUIRE( cex.has_value() );
@@ -618,7 +620,7 @@ TEST_CASE( "Simple safe HWMCC benchmark" )
     auto store = variable_store{};
     const auto system = system_from_aiger( store, str );
 
-    auto checker = verifier{ store, system };
+    auto checker = verifier{ store, system, seed };
     const auto cex = checker.run();
 
     REQUIRE( !cex.has_value() );
