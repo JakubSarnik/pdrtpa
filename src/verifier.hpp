@@ -257,6 +257,7 @@ private:
 
     void log_trace_content() const;
     [[nodiscard]] [[maybe_unused]] bool is_state_cube( std::span< const literal > literals ) const;
+    [[nodiscard]] [[maybe_unused]] bool is_input_cube( std::span< const literal > literals ) const;
 
 public:
     explicit verifier( variable_store& store, const transition_system& system, unsigned int seed ) :

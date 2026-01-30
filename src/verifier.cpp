@@ -194,10 +194,22 @@ auto verifier::check_trivial_cases() -> result_t
 
         if ( slv.query().is_sat() )
         {
+            auto get_inputs = [ & ]( variable_range original_range )
+            {
+                return shift_literals( original_range, _system->input_vars(),
+                    slv.get_model( original_range ) );
+            };
+
+            auto left_inputs = get_inputs( _left_input_vars );
+            auto right_inputs = get_inputs( _right_input_vars );
+
+            assert( is_input_cube( left_inputs ) );
+            assert( is_input_cube( right_inputs ) );
+
             return std::vector
             {
-                slv.get_model( _left_input_vars ),
-                slv.get_model( _right_input_vars )
+                std::move( left_inputs ),
+                std::move( right_inputs )
             };
         }
     }
@@ -605,4 +617,15 @@ bool verifier::is_state_cube( std::span< const literal > literals ) const
     };
 
     return std::ranges::all_of( literals, [ & ]( literal lit ){ return is_state_var( lit.var() ); } );
+}
+
+bool verifier::is_input_cube( std::span< const literal > literals ) const
+{
+    const auto is_input_var = [ & ]( variable var )
+    {
+        const auto [ type, _ ] = _system->get_var_info( var );
+        return type == var_type::input;
+    };
+
+    return std::ranges::all_of( literals, [ & ]( literal lit ){ return is_input_var( lit.var() ); } );
 }
