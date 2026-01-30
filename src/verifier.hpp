@@ -245,8 +245,9 @@ private:
     bool solve_obligation( const proof_obligation& po );
 
     bool has_concrete_edge( const proof_obligation& po );
+    std::optional< std::pair< cex_handle, cex_handle > > split_path( const proof_obligation& po );
     bool has_path_of_length_two( const proof_obligation& po );
-    std::optional< std::pair< proof_obligation, proof_obligation > > split_in_the_middle( const proof_obligation& po );
+    std::optional< std::pair< proof_obligation, proof_obligation > > split_obligation( const proof_obligation& po );
 
     std::pair< cube, cube > generalize_blocked_arrow( const cube& s, const cube& t, int level );
     void block_arrow_at( const cube& s, const cube& t, int level, int start_from = 1 );

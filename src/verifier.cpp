@@ -267,7 +267,7 @@ bool verifier::solve_obligation( const proof_obligation& po )
     {
         // s /\ TF[ k - 1 ]( X, X° ) /\ TF[ k - 1 ]( X°, X' ) /\ t'
 
-        auto pair = split_in_the_middle( po );
+        auto pair = split_obligation( po );
 
         while ( pair.has_value() )
         {
@@ -278,7 +278,7 @@ bool verifier::solve_obligation( const proof_obligation& po )
             if ( solve_obligation( left ) && solve_obligation( right ) )
                 return true;
 
-            pair = split_in_the_middle( po );
+            pair = split_obligation( po );
         }
     }
 
@@ -313,50 +313,12 @@ bool verifier::has_concrete_edge( const proof_obligation& po )
     return false;
 }
 
-bool verifier::has_path_of_length_two( const proof_obligation& po )
+auto verifier::split_path( const proof_obligation& po )
+    -> std::optional< std::pair< cex_handle, cex_handle > >
 {
     assert( is_state_cube( get_s( po ).literals() ) );
     assert( is_state_cube( get_t( po ).literals() ) );
-
-    if ( _consecution_solver
-            .query()
-            .assume( activators_from( 0 ) )
-            .assume( get_s( po ).literals() )
-            .assume( prime( get_t( po ).literals() ) )
-            .is_sat() )
-    {
-        auto middle_state = cube{ uncircle( _consecution_solver.get_model( _middle_state_vars ) ), is_sorted };
-
-        assert( is_state_cube( middle_state.literals() ) );
-
-        auto get_inputs = [ & ]( variable_range original_range )
-        {
-            return shift_literals( original_range, _system->input_vars(),
-                _consecution_solver.get_model( original_range ) );
-        };
-
-        // TODO: Copying of the state cubes here is a bit ugly. Can't
-        //       we store cubes in a pool?
-        _cexes.get( po.handle() ).left = _cexes.make( get_s( po ), middle_state,
-            cube{ get_inputs( _left_input_vars ), is_sorted } );
-        _cexes.get( po.handle() ).right = _cexes.make( std::move( middle_state ), get_t( po ),
-            cube{ get_inputs( _right_input_vars ), is_sorted } );
-
-        return true;
-    }
-
-    return false;
-}
-
-auto verifier::split_in_the_middle( const proof_obligation& po )
-    -> std::optional< std::pair< proof_obligation, proof_obligation > >
-{
-    assert( is_state_cube( get_s( po ).literals() ) );
-    assert( is_state_cube( get_t( po ).literals() ) );
-    assert( po.level() >= 2 && po.level() <= depth() ); // Levels 0 and 1 are checked separately
-
-    // TODO: This function and has_path_of_length_two are really similar.
-    //       Deduplicate somehow!
+    assert( po.level() >= 1 && po.level() <= depth() ); // Level 0 cannot be split.
 
     if ( _consecution_solver
             .query()
@@ -369,21 +331,62 @@ auto verifier::split_in_the_middle( const proof_obligation& po )
 
         assert( is_state_cube( u.literals() ) );
 
-        // TODO: Copying of the state cubes, see above.
-        const auto left = _cexes.make( get_s( po ), u );
-        const auto right = _cexes.make( std::move( u ), get_t( po ) );
+        auto left_inputs = std::optional< cube >{};
+        auto right_inputs = std::optional< cube >{};
+
+        if ( po.level() == 1 )
+        {
+            auto get_inputs = [ & ]( variable_range original_range )
+            {
+                return cube{ shift_literals( original_range, _system->input_vars(),
+                    _consecution_solver.get_model( original_range ) ), is_sorted };
+            };
+
+            left_inputs = get_inputs( _left_input_vars );
+            right_inputs = get_inputs( _right_input_vars );
+
+            assert( is_input_cube( left_inputs->literals() ) );
+            assert( is_input_cube( right_inputs->literals() ) );
+        }
+
+        // TODO: Copying of the state cubes here is a bit ugly. Can't
+        //       we store cubes in a pool?
+        const auto left = _cexes.make( get_s( po ), u, std::move( left_inputs ) );
+        const auto right = _cexes.make( std::move( u ), get_t( po ), std::move( right_inputs ) );
 
         _cexes.get( po.handle() ).left = left;
         _cexes.get( po.handle() ).right = right;
 
-        return std::pair
-        {
-            proof_obligation{ left, po.level() - 1 },
-            proof_obligation{ right, po.level() - 1 }
-        };
+        return std::pair{ left, right };
     }
 
     return {};
+}
+
+bool verifier::has_path_of_length_two( const proof_obligation& po )
+{
+    assert( is_state_cube( get_s( po ).literals() ) );
+    assert( is_state_cube( get_t( po ).literals() ) );
+    assert( po.level() == 1 );
+
+    return split_path( po ).has_value();
+}
+
+auto verifier::split_obligation( const proof_obligation& po )
+    -> std::optional< std::pair< proof_obligation, proof_obligation > >
+{
+    assert( is_state_cube( get_s( po ).literals() ) );
+    assert( is_state_cube( get_t( po ).literals() ) );
+    assert( po.level() >= 2 && po.level() <= depth() ); // Levels 0 and 1 are checked separately
+
+    return split_path( po ).transform( [ & ]( const std::pair< cex_handle, cex_handle >& split )
+    {
+        return std::pair
+        {
+            proof_obligation{ split.first, po.level() - 1 },
+            proof_obligation{ split.second, po.level() - 1 }
+        };
+    } );
 }
 
 std::pair< cube, cube > verifier::generalize_blocked_arrow( const cube& s, const cube& t, int level )
