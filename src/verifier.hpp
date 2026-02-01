@@ -3,7 +3,6 @@
 #include "logic.hpp"
 #include "transition_system.hpp"
 #include "solver.hpp"
-#include <concepts>
 #include <vector>
 #include <optional>
 #include <random>
