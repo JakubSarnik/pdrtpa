@@ -147,6 +147,7 @@ auto verifier::check() -> result_t
         }
 
         _cexes.clear();
+        _cubes.clear();
     }
 }
 
@@ -227,9 +228,11 @@ std::optional< cex_handle > verifier::get_error_cex()
         .assume( activators_from( depth() ) )
         .is_sat() )
     {
-        return _cexes.make( cube{ _error_solver.get_model( _system->state_vars() ), is_sorted },
-                            cube{ unprime( _error_solver.get_model( _system->next_state_vars() ) ), is_sorted },
-                            cube{ _error_solver.get_model( _system->input_vars() ), is_sorted } );
+        const auto s = _cubes.make( _error_solver.get_model( _system->state_vars() ), is_sorted );
+        const auto t = _cubes.make( unprime( _error_solver.get_model( _system->next_state_vars() ) ), is_sorted );
+        const auto i = _cubes.make( _error_solver.get_model( _system->input_vars() ), is_sorted );
+
+        return _cexes.make( s, t, i );
     }
 
     return {};
@@ -244,7 +247,7 @@ bool verifier::solve_obligation( const proof_obligation& po )
     // We need to first check if s /\ TF[ 0 ] /\ t' is satisfiable,
     // where TF[ 0 ] = id \/ T.
 
-    if ( get_s( po ).literals() == get_t( po ).literals() )
+    if ( _cubes.get( get_s( po ) ) == _cubes.get( get_t( po ) ) )
         return true;
 
     if ( has_concrete_edge( po ) )
@@ -282,7 +285,10 @@ bool verifier::solve_obligation( const proof_obligation& po )
         }
     }
 
-    const auto [ c, d ] = generalize_blocked_arrow( get_s( po ), get_t( po ), po.level() );
+    const auto [ ch, dh ] = generalize_blocked_arrow( get_s( po ), get_t( po ), po.level() );
+
+    const auto& c = _cubes.get( ch );
+    const auto& d = _cubes.get( dh );
 
     logger::log_line_debug( "{}: c = {}", po.level(), c.to_string() );
     logger::log_line_debug( "{}  d = {}", std::string( std::to_string( po.level() ).size(), ' '), d.to_string() );
@@ -294,18 +300,21 @@ bool verifier::solve_obligation( const proof_obligation& po )
 
 bool verifier::has_concrete_edge( const proof_obligation& po )
 {
-    assert( is_state_cube( get_s( po ).literals() ) );
-    assert( is_state_cube( get_t( po ).literals() ) );
+    const auto s = std::span{ _cubes.get( get_s( po ) ).literals() };
+    const auto t = std::span{ _cubes.get( get_t( po ) ).literals() };
+
+    assert( is_state_cube( s ) );
+    assert( is_state_cube( t ) );
 
     if ( _consecution_solver
             .query()
             .assume( _trans_activator )
-            .assume( get_s( po ).literals() )
-            .assume( prime( get_t( po ).literals() ) )
+            .assume( s )
+            .assume( prime( t ) )
             .is_sat() )
     {
         assert( !get_inputs( po ).has_value() );
-        _cexes.get( po.handle() ).input_vars = cube{ _consecution_solver.get_model( _system->input_vars() ), is_sorted };
+        _cexes.get( po.handle() ).input_vars = _cubes.make( _consecution_solver.get_model( _system->input_vars() ), is_sorted );
 
         return true;
     }
@@ -316,43 +325,44 @@ bool verifier::has_concrete_edge( const proof_obligation& po )
 auto verifier::split_path( const proof_obligation& po )
     -> std::optional< std::pair< cex_handle, cex_handle > >
 {
-    assert( is_state_cube( get_s( po ).literals() ) );
-    assert( is_state_cube( get_t( po ).literals() ) );
+    const auto s = std::span{ _cubes.get( get_s( po ) ).literals() };
+    const auto t = std::span{ _cubes.get( get_t( po ) ).literals() };
+
+    assert( is_state_cube( s ) );
+    assert( is_state_cube( t ) );
     assert( po.level() >= 1 && po.level() <= depth() ); // Level 0 cannot be split.
 
     if ( _consecution_solver
             .query()
             .assume( activators_from( po.level() - 1 ) )
-            .assume( get_s( po ).literals() )
-            .assume( prime( get_t( po ).literals() ) )
+            .assume( s )
+            .assume( prime( t ) )
             .is_sat() )
     {
-        auto u = cube{ uncircle( _consecution_solver.get_model( _middle_state_vars ) ), is_sorted };
+        const auto uh = _cubes.make( uncircle( _consecution_solver.get_model( _middle_state_vars ) ), is_sorted );
 
-        assert( is_state_cube( u.literals() ) );
+        assert( is_state_cube( _cubes.get( uh ).literals() ) );
 
-        auto left_inputs = std::optional< cube >{};
-        auto right_inputs = std::optional< cube >{};
+        auto left_inputs = std::optional< cube_handle >{};
+        auto right_inputs = std::optional< cube_handle >{};
 
         if ( po.level() == 1 )
         {
             auto get_inputs = [ & ]( variable_range original_range )
             {
-                return cube{ shift_literals( original_range, _system->input_vars(),
-                    _consecution_solver.get_model( original_range ) ), is_sorted };
+                return _cubes.make( shift_literals( original_range, _system->input_vars(),
+                    _consecution_solver.get_model( original_range ) ), is_sorted );
             };
 
             left_inputs = get_inputs( _left_input_vars );
             right_inputs = get_inputs( _right_input_vars );
 
-            assert( is_input_cube( left_inputs->literals() ) );
-            assert( is_input_cube( right_inputs->literals() ) );
+            assert( is_input_cube( _cubes.get( *left_inputs ).literals() ) );
+            assert( is_input_cube( _cubes.get( *right_inputs ).literals() ) );
         }
 
-        // TODO: Copying of the state cubes here is a bit ugly. Can't
-        //       we store cubes in a pool?
-        const auto left = _cexes.make( get_s( po ), u, std::move( left_inputs ) );
-        const auto right = _cexes.make( std::move( u ), get_t( po ), std::move( right_inputs ) );
+        const auto left = _cexes.make( get_s( po ), uh, left_inputs );
+        const auto right = _cexes.make( uh, get_t( po ), right_inputs );
 
         _cexes.get( po.handle() ).left = left;
         _cexes.get( po.handle() ).right = right;
@@ -365,8 +375,8 @@ auto verifier::split_path( const proof_obligation& po )
 
 bool verifier::has_path_of_length_two( const proof_obligation& po )
 {
-    assert( is_state_cube( get_s( po ).literals() ) );
-    assert( is_state_cube( get_t( po ).literals() ) );
+    assert( is_state_cube( _cubes.get( get_s( po ) ).literals() ) );
+    assert( is_state_cube( _cubes.get( get_t( po ) ).literals() ) );
     assert( po.level() == 1 );
 
     return split_path( po ).has_value();
@@ -375,8 +385,8 @@ bool verifier::has_path_of_length_two( const proof_obligation& po )
 auto verifier::split_obligation( const proof_obligation& po )
     -> std::optional< std::pair< proof_obligation, proof_obligation > >
 {
-    assert( is_state_cube( get_s( po ).literals() ) );
-    assert( is_state_cube( get_t( po ).literals() ) );
+    assert( is_state_cube( _cubes.get( get_s( po ) ).literals() ) );
+    assert( is_state_cube( _cubes.get( get_t( po ) ).literals() ) );
     assert( po.level() >= 2 && po.level() <= depth() ); // Levels 0 and 1 are checked separately
 
     return split_path( po ).transform( [ & ]( const std::pair< cex_handle, cex_handle >& split )
@@ -389,8 +399,11 @@ auto verifier::split_obligation( const proof_obligation& po )
     } );
 }
 
-std::pair< cube, cube > verifier::generalize_blocked_arrow( const cube& s, const cube& t, int level )
+std::pair< cube_handle, cube_handle > verifier::generalize_blocked_arrow( cube_handle sh, cube_handle th, int level )
 {
+    const auto s = std::span{ _cubes.get( sh ).literals() };
+    const auto t = std::span{ _cubes.get( th ).literals() };
+
     // We know that:
     // - s /\ TF[ 0 ] /\ t' is unsatisfiable, i.e.
     //   - s != t,
@@ -402,11 +415,11 @@ std::pair< cube, cube > verifier::generalize_blocked_arrow( const cube& s, const
     // and d for t.
 
     assert( 1 <= level && level <= depth() );
-    assert( is_state_cube( s.literals() ) );
-    assert( is_state_cube( t.literals() ) );
+    assert( is_state_cube( s ) );
+    assert( is_state_cube( t ) );
 
-    auto c = _consecution_solver.get_core( s.literals() );
-    auto d = _consecution_solver.get_core_mapped( t.literals(), [ & ]( literal lit ){ return prime( lit ); } );
+    auto c = _consecution_solver.get_core( s );
+    auto d = _consecution_solver.get_core_mapped( t, [ & ]( literal lit ){ return prime( lit ); } );
 
     // Cores ensure that
     //   c /\ TF[ k - 1 ]( X, X° ) /\ TF[ k - 1 ]( X°, X' ) /\ d'
@@ -421,7 +434,7 @@ std::pair< cube, cube > verifier::generalize_blocked_arrow( const cube& s, const
         // otherwise we would have s = t) and appending the two separate
         // polarities to both c and d.
 
-        const auto diff = find_conflict_sorted( s.literals(), t.literals() );
+        const auto diff = find_conflict_sorted( s, t );
         assert( diff.has_value() );
 
         insert_sorted( c, *diff );
@@ -444,8 +457,8 @@ std::pair< cube, cube > verifier::generalize_blocked_arrow( const cube& s, const
         const auto ss = _consecution_solver.get_model( _system->state_vars() );
         const auto tt = unprime( _consecution_solver.get_model( _system->next_state_vars() ) );
 
-        const auto c_conflict = find_conflict_sorted( s.literals(), ss );
-        const auto d_conflict = find_conflict_sorted( t.literals(), tt );
+        const auto c_conflict = find_conflict_sorted( s, ss );
+        const auto d_conflict = find_conflict_sorted( t, tt );
 
         if ( c_conflict.has_value() && d_conflict.has_value() )
         {
@@ -481,7 +494,11 @@ std::pair< cube, cube > verifier::generalize_blocked_arrow( const cube& s, const
                 .assume( prime( d ) )
                 .is_unsat() );
 
-    return { cube{ std::move( c ), is_sorted }, cube{ std::move( d ), is_sorted } };
+    return
+    {
+        _cubes.make( std::move( c ), is_sorted ),
+        _cubes.make( std::move( d ), is_sorted )
+    };
 }
 
 void verifier::block_arrow_at( const cube& s, const cube& t, int level, int start_from /* = 1 */ )
@@ -546,7 +563,7 @@ std::vector< std::vector< literal > > verifier::build_counterexample( cex_handle
             // If a variable doesn't appear in any literal, its value is not
             // important, so we might as well just make it false.
             for ( const auto in : _system->input_vars() )
-                row.push_back( cex.input_vars->find( in ).value_or( literal{ in, false } ) );
+                row.push_back( _cubes.get( *cex.input_vars ).find( in ).value_or( literal{ in, false } ) );
 
             inputs.emplace_back( std::move( row ) );
         }

@@ -3,44 +3,61 @@
 #include "logic.hpp"
 #include "transition_system.hpp"
 #include "solver.hpp"
+#include <utility>
 #include <vector>
 #include <optional>
 #include <random>
 
-using cex_handle = std::size_t;
+// TODO: Make this handle safer (i.e. a strong newtype)?
+using pool_handle = std::size_t;
 
-struct cex_entry
+template < typename T >
+class pool
 {
-    cube s_state_vars;
-    cube t_state_vars; // Unprimed!
-    std::optional< cube > input_vars;
-    std::optional< cex_handle > left;
-    std::optional< cex_handle > right;
-};
-
-// TODO: Make this safer and/or more efficient?
-// TODO: Better yet, try a simple shared_ptr structure...
-class cex_pool
-{
-    std::vector< cex_entry > _entries;
+    std::vector< T > _entries;
 
 public:
     // Beware that the handle is invalidated after the next call to clear!
-    [[nodiscard]] cex_handle make( cube s_state_vars, cube t_state_vars, std::optional< cube > input_vars = {} )
+    template< typename... Args >
+    [[nodiscard]] pool_handle make( Args&&... args )
     {
-        _entries.emplace_back( std::move( s_state_vars ), std::move( t_state_vars ), std::move( input_vars ) );
+        _entries.emplace_back( std::forward< Args >( args )... );
         return _entries.size() - 1;
     }
 
-    [[nodiscard]] cex_entry& get( cex_handle handle )
+    [[nodiscard]] auto&& get( this auto&& self, pool_handle handle )
     {
-        assert( handle < _entries.size() );
-        return _entries[ handle ];
+        assert( handle < self._entries.size() );
+        return std::forward_like< decltype( self ) >( self._entries[ handle ] );
     }
 
     void clear()
     {
         _entries.clear();
+    }
+};
+
+class cube_pool : public pool< cube > {};
+
+using cube_handle = pool_handle;
+using cex_handle = pool_handle;
+
+struct cex_entry
+{
+    cube_handle s_state_vars;
+    cube_handle t_state_vars; // Unprimed!
+    std::optional< cube_handle > input_vars;
+    std::optional< cex_handle > left;
+    std::optional< cex_handle > right;
+};
+
+class cex_pool : public pool< cex_entry >
+{
+public:
+    [[nodiscard]]
+    pool_handle make( cube_handle s_state_vars, cube_handle t_state_vars, std::optional< cube_handle > input_vars = {} )
+    {
+        return pool::make( s_state_vars, t_state_vars, input_vars, std::nullopt, std::nullopt );
     }
 };
 
@@ -111,6 +128,8 @@ private:
     std::vector< std::vector< std::pair< cube, cube > > > _trace_blocked_arrows;
     std::vector< literal > _trace_activators;
     literal _trans_activator; // Activates T(X, Y, X') in _consecution_solver
+
+    cube_pool _cubes;
     cex_pool _cexes;
 
     [[nodiscard]] int depth() const
@@ -221,17 +240,17 @@ private:
         return shift_literal( _middle_state_vars, _system->state_vars(), lit );
     }
 
-    const cube& get_s( const proof_obligation& po )
+    cube_handle get_s( const proof_obligation& po )
     {
         return _cexes.get( po.handle() ).s_state_vars;
     }
 
-    const cube& get_t( const proof_obligation& po )
+    cube_handle get_t( const proof_obligation& po )
     {
         return _cexes.get( po.handle() ).t_state_vars;
     }
 
-    const std::optional< cube >& get_inputs( const proof_obligation& po )
+    const std::optional< cube_handle >& get_inputs( const proof_obligation& po )
     {
         return _cexes.get( po.handle() ).input_vars;
     }
@@ -248,7 +267,7 @@ private:
     bool has_path_of_length_two( const proof_obligation& po );
     std::optional< std::pair< proof_obligation, proof_obligation > > split_obligation( const proof_obligation& po );
 
-    std::pair< cube, cube > generalize_blocked_arrow( const cube& s, const cube& t, int level );
+    std::pair< cube_handle, cube_handle > generalize_blocked_arrow( cube_handle sh, cube_handle th, int level );
     void block_arrow_at( const cube& s, const cube& t, int level, int start_from = 1 );
 
     std::vector< std::vector< literal > > build_counterexample( cex_handle root );
