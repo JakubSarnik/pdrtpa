@@ -282,12 +282,12 @@ bool verifier::solve_obligation( const proof_obligation& po )
         }
     }
 
-    const auto [ c, d ] = generalize_blocked_arrow( get_s( po ), get_t( po ), po.level() );
+    const auto [ c, d, block_at ] = generalize_blocked_arrow( get_s( po ), get_t( po ), po.level() );
 
     logger::log_line_debug( "{}: c = {}", po.level(), c.to_string() );
     logger::log_line_debug( "{}  d = {}", std::string( std::to_string( po.level() ).size(), ' '), d.to_string() );
 
-    block_arrow_at( c, d, po.level() );
+    block_arrow_at( c, d, block_at );
 
     return false;
 }
@@ -389,7 +389,7 @@ auto verifier::split_obligation( const proof_obligation& po )
     } );
 }
 
-std::pair< cube, cube > verifier::generalize_blocked_arrow( const cube& s, const cube& t, int level )
+std::tuple< cube, cube, int > verifier::generalize_blocked_arrow( const cube& s, const cube& t, int level )
 {
     // We know that:
     // - s /\ TF[ 0 ] /\ t' is unsatisfiable, i.e.
@@ -481,7 +481,7 @@ std::pair< cube, cube > verifier::generalize_blocked_arrow( const cube& s, const
                 .assume( prime( d ) )
                 .is_unsat() );
 
-    return { cube{ std::move( c ), is_sorted }, cube{ std::move( d ), is_sorted } };
+    return { cube{ std::move( c ), is_sorted }, cube{ std::move( d ), is_sorted }, level };
 }
 
 void verifier::block_arrow_at( const cube& s, const cube& t, int level, int start_from /* = 1 */ )
