@@ -292,17 +292,45 @@ bool verifier::solve_obligation( const proof_obligation& po )
     return false;
 }
 
+// Is
+//   c /\ T( X, Y, X' ) /\ d'
+// satisfiable?
+bool verifier::has_edge( std::span< const literal > c, std::span< const literal > d )
+{
+    assert( is_state_cube( c ) );
+    assert( is_state_cube( d ) );
+
+    return _consecution_solver
+           .query()
+           .assume( _trans_activator )
+           .assume( c )
+           .assume( prime( d ) )
+           .is_sat();
+}
+
+// Is
+//   c /\ TF[ level - 1 ]( X, X° ) /\ TF[ level - 1 ]( X°, X' ) /\ d'
+// satisfiable?
+bool verifier::has_middle_point( std::span< const literal > c, std::span< const literal > d, int level )
+{
+    assert( is_state_cube( c ) );
+    assert( is_state_cube( d ) );
+    assert( level >= 1 && level <= depth() );
+
+    return _consecution_solver
+           .query()
+           .assume( activators_from( level - 1 ) )
+           .assume( c )
+           .assume( prime( d ) )
+           .is_sat();
+}
+
 bool verifier::has_concrete_edge( const proof_obligation& po )
 {
     assert( is_state_cube( get_s( po ).literals() ) );
     assert( is_state_cube( get_t( po ).literals() ) );
 
-    if ( _consecution_solver
-            .query()
-            .assume( _trans_activator )
-            .assume( get_s( po ).literals() )
-            .assume( prime( get_t( po ).literals() ) )
-            .is_sat() )
+    if ( has_edge( get_s( po ).literals(), get_t( po ).literals() ) )
     {
         assert( !get_inputs( po ).has_value() );
         _cexes.get( po.handle() ).input_vars = cube{ _consecution_solver.get_model( _system->input_vars() ), is_sorted };
@@ -320,12 +348,7 @@ auto verifier::split_path( const proof_obligation& po )
     assert( is_state_cube( get_t( po ).literals() ) );
     assert( po.level() >= 1 && po.level() <= depth() ); // Level 0 cannot be split.
 
-    if ( _consecution_solver
-            .query()
-            .assume( activators_from( po.level() - 1 ) )
-            .assume( get_s( po ).literals() )
-            .assume( prime( get_t( po ).literals() ) )
-            .is_sat() )
+    if ( has_middle_point( get_s( po ).literals(), get_t( po ).literals(), po.level() ) )
     {
         auto u = cube{ uncircle( _consecution_solver.get_model( _middle_state_vars ) ), is_sorted };
 
@@ -391,6 +414,66 @@ auto verifier::split_obligation( const proof_obligation& po )
 
 std::tuple< cube, cube, int > verifier::generalize_blocked_arrow( const cube& s, const cube& t, int level )
 {
+    assert( 1 <= level && level <= depth() );
+    assert( is_state_cube( s.literals() ) );
+    assert( is_state_cube( t.literals() ) );
+
+    auto [ c0, d0, block_at ] = generalize_from_core( s, t, level );
+
+    auto c = c0.literals();
+    auto d = d0.literals();
+
+    const auto all_literals = [ & ]
+    {
+        auto res = std::vector< std::pair< bool, literal > >{};
+        res.reserve( c.size() + d.size() );
+
+        for ( const auto lit : c )
+            res.emplace_back( true, lit );
+        for ( const auto lit : d )
+            res.emplace_back( false, lit );
+
+        std::ranges::shuffle( res, _random );
+
+        return res;
+    }();
+
+    // TODO: Ugly cube->vector->cube back and forth transformation.
+
+    const auto drop_and_try = [ & ]( std::vector< literal >& drop_from, literal lit )
+    {
+        if ( const auto erased = std::erase( drop_from, lit ); erased == 0 )
+            return;
+
+        if ( intersects_sorted( c, d ) || has_edge( c, d ) || has_middle_point( c, d, level ) )
+        {
+            insert_sorted( drop_from, lit );
+        }
+        else
+        {
+            auto [ c1, d1, block_at_1 ] = generalize_from_core( cube{ c }, cube{ d }, level );
+
+            c = std::move( c1 ).literals();
+            d = std::move( d1 ).literals();
+            block_at = block_at_1;
+        }
+    };
+
+    for ( const auto [ in_c, lit ] : all_literals )
+    {
+        if ( in_c )
+            drop_and_try( c, lit );
+        else
+            drop_and_try( d, lit );
+    }
+
+    // TODO: Try to raise the level.
+
+    return { cube{ c }, cube{ d }, level };
+}
+
+std::tuple< cube, cube, int > verifier::generalize_from_core( const cube& s, const cube& t, int level )
+{
     // We know that:
     // - s /\ TF[ 0 ] /\ t' is unsatisfiable, i.e.
     //   - s != t,
@@ -404,6 +487,10 @@ std::tuple< cube, cube, int > verifier::generalize_blocked_arrow( const cube& s,
     assert( 1 <= level && level <= depth() );
     assert( is_state_cube( s.literals() ) );
     assert( is_state_cube( t.literals() ) );
+    // CONTRACT: The previous SAT call was has_middle_point.
+
+    // TODO: Try to raise the level, or just remove the parameter
+    //       from the function.
 
     auto c = _consecution_solver.get_core( s.literals() );
     auto d = _consecution_solver.get_core_mapped( t.literals(), [ & ]( literal lit ){ return prime( lit ); } );
@@ -434,12 +521,7 @@ std::tuple< cube, cube, int > verifier::generalize_blocked_arrow( const cube& s,
 
     auto add_to_c = std::bernoulli_distribution{ 0.5 }; // NOLINT: 0.5 is a self-explanatory probability
 
-    while ( _consecution_solver
-                .query()
-                .assume( _trans_activator )
-                .assume( c )
-                .assume( prime( d ) )
-                .is_sat() )
+    while ( has_edge( c, d ) )
     {
         const auto ss = _consecution_solver.get_model( _system->state_vars() );
         const auto tt = unprime( _consecution_solver.get_model( _system->next_state_vars() ) );
@@ -474,12 +556,7 @@ std::tuple< cube, cube, int > verifier::generalize_blocked_arrow( const cube& s,
     //   c /\ TF[ k - 1 ]( X, X° ) /\ TF[ k - 1 ]( X°, X' ) /\ d'
     // must still be unsatisfiable.
 
-    assert( _consecution_solver
-                .query()
-                .assume( activators_from( level - 1 ) )
-                .assume( c )
-                .assume( prime( d ) )
-                .is_unsat() );
+    assert( !has_middle_point( c, d, level ) );
 
     return { cube{ std::move( c ), is_sorted }, cube{ std::move( d ), is_sorted }, level };
 }
@@ -577,12 +654,7 @@ bool verifier::propagate()
 
         for ( const auto& [ c, d ] : arrows )
         {
-            if ( _consecution_solver
-                    .query()
-                    .assume( activators_from( i ) )
-                    .assume( c.literals() )
-                    .assume( prime( d.literals() ) )
-                    .is_unsat() )
+            if ( !has_middle_point( c.literals(), d.literals(), i + 1 ) )
             {
                 // TODO: Further generalization from core?
                 //       (E.g. as in generalize_from_core in PDR).

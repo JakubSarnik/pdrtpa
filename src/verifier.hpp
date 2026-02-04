@@ -244,12 +244,16 @@ private:
     std::optional< cex_handle > get_error_cex();
     bool solve_obligation( const proof_obligation& po );
 
+    bool has_edge( std::span< const literal > c, std::span< const literal > d );
+    bool has_middle_point( std::span< const literal > c, std::span< const literal > d, int level );
+
     bool has_concrete_edge( const proof_obligation& po );
     std::optional< std::pair< cex_handle, cex_handle > > split_path( const proof_obligation& po );
     bool has_path_of_length_two( const proof_obligation& po );
     std::optional< std::pair< proof_obligation, proof_obligation > > split_obligation( const proof_obligation& po );
 
     std::tuple< cube, cube, int > generalize_blocked_arrow( const cube& s, const cube& t, int level );
+    std::tuple< cube, cube, int > generalize_from_core( const cube& s, const cube& t, int level );
     void block_arrow_at( const cube& s, const cube& t, int level, int start_from = 1 );
 
     std::vector< std::vector< literal > > build_counterexample( cex_handle root );
