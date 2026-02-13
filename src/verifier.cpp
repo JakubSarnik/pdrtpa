@@ -656,9 +656,8 @@ bool verifier::propagate()
         {
             if ( !has_middle_point( c.literals(), d.literals(), i + 1 ) )
             {
-                // TODO: Further generalization from core?
-                //       (E.g. as in generalize_from_core in PDR).
-                block_arrow_at( c, d, i + 1, i );
+                auto [ gen_c, gen_d, gen_level ] = generalize_from_core( c, d, i + 1 );
+                block_arrow_at( gen_c, gen_d, gen_level, i );
             }
         }
 
