@@ -11,18 +11,14 @@
 
 class variable
 {
-    friend class variable_range;
-    friend class variable_store;
-    friend class literal;
-
     int _id;
 
+public:
     explicit variable( int id ) noexcept : _id{ id }
     {
         assert( id > 0 );
     }
 
-public:
     [[nodiscard]] int id() const { return _id; }
 
     friend auto operator<=>( variable, variable ) = default;
@@ -39,17 +35,8 @@ struct std::hash< variable >
 
 class variable_range
 {
-    friend class variable_store;
-
     int _begin;
     int _end;
-
-    // Construct a range representing variables in range [begin, end).
-    variable_range( int begin, int end ) noexcept : _begin{ begin }, _end{ end }
-    {
-        assert( begin > 0 );
-        assert( begin <= end );
-    }
 
     class iterator
     {
@@ -87,6 +74,12 @@ class variable_range
     };
 
 public:
+    // Construct a range representing variables in range [begin, end).
+    variable_range( int begin, int end ) noexcept : _begin{ begin }, _end{ end }
+    {
+        assert( begin > 0 );
+        assert( begin <= end );
+    }
 
     [[nodiscard]] int size() const { return _end - _begin; }
 
@@ -140,9 +133,9 @@ class literal
 {
     int _value;
 
+public:
     explicit literal( int value ) noexcept : _value{ value } {}
 
-public:
     explicit literal( variable var, bool positive = true ) noexcept : _value{ var.id() }
     {
         if ( !positive )
