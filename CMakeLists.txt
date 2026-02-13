@@ -40,6 +40,8 @@ add_library(pdrtpa-lib STATIC
         src/verifier.cpp
         src/verifier.hpp
         src/aiger.hpp
+        src/simplifier.cpp
+        src/simplifier.hpp
 )
 
 target_link_libraries(pdrtpa-lib PUBLIC aiger)

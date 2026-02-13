@@ -4,6 +4,7 @@
 #include "logger.hpp"
 #include "aiger_builder.hpp"
 #include "verifier.hpp"
+#include "simplifier.hpp"
 #include <print>
 #include <string>
 #include <optional>
@@ -158,17 +159,15 @@ int main( int argc, char** argv ) // NOLINT: Don't care about bad_alloc's here.
     logger::log_line_debug( "\tAiger latches:   {}", aig->num_latches );
     logger::log_line_debug( "\tState variables: {}", system->state_vars().size() );
 
-    // TODO: At this point, we could simplify the three formulae, each in its
-    //       own solver and using cadical's freeze on state, next state and
-    //       input vars, then calling simplify and finally traversing the
-    //       clauses again (ClauseIterator) to get the simplified formulae. Is
-    //       this good or not? Investigate once the model checker itself is
-    //       implemented.
+    logger::log_loud( "Simplifying... " );
 
+    auto simplified_system = simplify( *system );
+
+    logger::log_line_loud( "OK" );
     logger::log_line_loud( "Running..." );
     logger::log_debug( "\n" );
 
-    auto engine = verifier{ store, *system, seed };
+    auto engine = verifier{ store, simplified_system, seed };
     const auto result = engine.run();
 
     logger::log_debug( "\n" );
