@@ -209,6 +209,16 @@ public:
         return f;
     }
 
+    static cnf_formula from_dimacs( std::span< const int > dimacs )
+    {
+        auto f = cnf_formula{};
+
+        for ( const auto num : dimacs )
+            f._literals.emplace_back( num );
+
+        return f;
+    }
+
     void add_clause( std::span< const literal > clause )
     {
         _literals.insert( _literals.end(), clause.begin(), clause.end() );
