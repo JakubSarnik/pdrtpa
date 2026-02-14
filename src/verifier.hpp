@@ -173,7 +173,6 @@ private:
         std::span< const literal > literals )
     {
         auto lits = std::vector< literal >{};
-        // TODO: Consider reserve
 
         for ( auto lit : literals )
             if ( from.contains( lit.var() ) )
