@@ -76,8 +76,6 @@ void insert_sorted( std::vector< literal >& lits, literal lit )
 {
     assert( std::ranges::is_sorted( lits, cube_literal_lt ) );
 
-    // TODO: Do a linear search here perhaps?
-
     const auto it = std::ranges::lower_bound( lits, lit, cube_literal_lt );
 
     if ( it != lits.end() && *it == lit )
