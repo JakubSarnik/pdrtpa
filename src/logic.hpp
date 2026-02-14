@@ -354,7 +354,6 @@ public:
 
     [[nodiscard]] bool contains( literal lit ) const
     {
-        // TODO: Sequential search is probably faster here...
         return std::ranges::binary_search( _literals, lit, cube_literal_lt );
     }
 
