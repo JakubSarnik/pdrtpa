@@ -499,23 +499,7 @@ std::tuple< cube, cube, int > verifier::generalize_from_core( const cube& s, con
     //   1. No state is in both c and d (i.e. c and d have empty intersection),
     //   2. No state in c can reach a state in d in one step.
 
-    if ( intersects_sorted( c, d ) )
-    {
-        // Break the intersection by finding the first state variable that
-        // occurs in s and t in different polarities (which must exist, since
-        // otherwise we would have s = t) and appending the two separate
-        // polarities to both c and d.
-
-        const auto diff = find_conflict_sorted( s.literals(), t.literals() );
-        assert( diff.has_value() );
-
-        insert_sorted( c, *diff );
-        insert_sorted( d, !*diff );
-    }
-
-    assert( !intersects_sorted( c, d ) );
-
-    // Now we only need to ensure that c /\ T( X, Y, X' ) /\ d' is unsatisfiable.
+    // Let us first ensure that c /\ T( X, Y, X' ) /\ d' is unsatisfiable.
 
     auto add_to_c = std::bernoulli_distribution{ 0.5 }; // NOLINT: 0.5 is a self-explanatory probability
 
@@ -548,7 +532,24 @@ std::tuple< cube, cube, int > verifier::generalize_from_core( const cube& s, con
     sort_literals( c );
     sort_literals( d );
 
+    // Now, we only need to ensure that c and d have empty intersection.
+
+    if ( intersects_sorted( c, d ) )
+    {
+        // Break the intersection by finding the first state variable that
+        // occurs in s and t in different polarities (which must exist, since
+        // otherwise we would have s = t) and appending the two separate
+        // polarities to both c and d.
+
+        const auto diff = find_conflict_sorted( s.literals(), t.literals() );
+        assert( diff.has_value() );
+
+        insert_sorted( c, *diff );
+        insert_sorted( d, !*diff );
+    }
+
     assert( !intersects_sorted( c, d ) );
+    assert( !has_edge( c, d ) );
 
     // The formula
     //   c /\ TF[ k - 1 ]( X, X° ) /\ TF[ k - 1 ]( X°, X' ) /\ d'
