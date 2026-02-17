@@ -536,16 +536,36 @@ std::tuple< cube, cube, int > verifier::generalize_from_core( const cube& s, con
 
     if ( intersects_sorted( c, d ) )
     {
-        // Break the intersection by finding the first state variable that
-        // occurs in s and t in different polarities (which must exist, since
-        // otherwise we would have s = t) and appending the two separate
-        // polarities to both c and d.
+        // We need to break the intersection by making sure that there is a
+        // literal that occurs in different polarities in c and d (a conflict
+        // literal). If the original s has an empty intersection with d, there
+        // is a conflict literal which we can add to c to restore the conflict
+        // with d. The case of non-intersecting c and t is symmetric. Finally,
+        // it might be the case that neither s and d nor c and t are in
+        // conflict. However, we know that the original cubes s and t
+        // definitely are in conflict, otherwise they wouldn't be blocked (and
+        // therefore generalized), since (s, t) would contain an identity
+        // arrow.
 
-        const auto diff = find_conflict_sorted( s.literals(), t.literals() );
-        assert( diff.has_value() );
+        auto pair1 = std::pair{ std::span{ s.literals() }, std::span< const literal >{ d } };
+        auto pair2 = std::pair{ std::span< const literal >{ c }, std::span{ t.literals() } };
 
-        insert_sorted( c, *diff );
-        insert_sorted( d, !*diff );
+        if ( const auto diff1 = find_conflict_sorted( pair1.first, pair1.second ); diff1.has_value() )
+        {
+            insert_sorted( c, *diff1 );
+        }
+        else if ( const auto diff2 = find_conflict_sorted( pair2.first, pair2.second ); diff2.has_value() )
+        {
+            insert_sorted( d, !*diff2 );
+        }
+        else
+        {
+            const auto diff3 = find_conflict_sorted( s.literals(), t.literals() );
+            assert( diff3.has_value() );
+
+            insert_sorted( c, *diff3 );
+            insert_sorted( d, !*diff3 );
+        }
     }
 
     assert( !intersects_sorted( c, d ) );
