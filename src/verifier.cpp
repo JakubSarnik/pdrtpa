@@ -416,6 +416,10 @@ std::tuple< cube, cube, int > verifier::generalize_blocked_arrow( const cube& s,
     assert( is_state_cube( s.literals() ) );
     assert( is_state_cube( t.literals() ) );
 
+    // TODO: It would be good to have a switch that controls whether
+    //       we prefer smaller s cubes or smaller t cubes. Also in
+    //       generalize_from_core below.
+
     auto [ c0, d0, block_at ] = generalize_from_core( s, t, level );
 
     auto c = c0.literals();
