@@ -547,14 +547,11 @@ std::tuple< cube, cube, int > verifier::generalize_from_core( const cube& s, con
         // therefore generalized), since (s, t) would contain an identity
         // arrow.
 
-        auto pair1 = std::pair{ std::span{ s.literals() }, std::span< const literal >{ d } };
-        auto pair2 = std::pair{ std::span< const literal >{ c }, std::span{ t.literals() } };
-
-        if ( const auto diff1 = find_conflict_sorted( pair1.first, pair1.second ); diff1.has_value() )
+        if ( const auto diff1 = find_conflict_sorted( s.literals(), d ); diff1.has_value() )
         {
             insert_sorted( c, *diff1 );
         }
-        else if ( const auto diff2 = find_conflict_sorted( pair2.first, pair2.second ); diff2.has_value() )
+        else if ( const auto diff2 = find_conflict_sorted( c, t.literals() ); diff2.has_value() )
         {
             insert_sorted( d, !*diff2 );
         }
