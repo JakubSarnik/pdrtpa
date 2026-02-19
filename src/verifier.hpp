@@ -96,7 +96,9 @@ private:
     //   3b. s /\ T(X, Y, X') /\ t'
 
     solver _error_solver; // Solves I(X) /\ TF[i](X, X') /\ ~P'
-    solver _consecution_solver; // Solves TF[i](X, X°) /\ TF[i](X°, X') /\ s /\ t'
+    solver _one_step_solver; // Solves s /\ T(X, Y, X') /\ t'
+    solver _two_steps_solver; // Solves s /\ T(X, Y1, X°) /\ T(X°, Y2, X') /\ t'
+    solver _consecution_solver; // Solves s /\ TF[i](X, X°) /\ TF[i](X°, X') /\ t'
 
     const transition_system* _system = nullptr;
     cube _init_cube;
@@ -111,7 +113,6 @@ private:
 
     std::vector< std::vector< std::pair< cube, cube > > > _trace_blocked_arrows;
     std::vector< literal > _trace_activators;
-    literal _trans_activator; // Activates T(X, Y, X') in _consecution_solver
     cex_pool _cexes;
 
     [[nodiscard]] int depth() const
@@ -236,6 +237,21 @@ private:
         return _cexes.get( po.handle() ).input_vars;
     }
 
+    solver& get_solver_for( int level )
+    {
+        assert( 0 <= level && level <= depth() );
+
+        switch ( level )
+        {
+            case 0:
+                return _one_step_solver;
+            case 1:
+                return _two_steps_solver;
+            default:
+                return _consecution_solver;
+        }
+    }
+
     void initialize();
     result_t check();
     result_t check_trivial_cases();
@@ -274,8 +290,7 @@ public:
         _right_input_vars( store.make_range( system.input_vars().size() ) ),
         _right_aux_vars( store.make_range( system.aux_vars().size() ) ),
         _left_trans{ system.trans().map( [ & ]( literal l ){ return make_left_trans( l ); } ) },
-        _right_trans{ system.trans().map( [ & ]( literal l ){ return make_right_trans( l ); } ) },
-        _trans_activator{ store.make() }
+        _right_trans{ system.trans().map( [ & ]( literal l ){ return make_right_trans( l ); } ) }
     {}
 
     verifier( const verifier& ) = delete;
