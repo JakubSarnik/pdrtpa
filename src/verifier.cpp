@@ -109,15 +109,10 @@ void verifier::initialize()
     _error_solver.assert_formula( _system->init() );
     _error_solver.assert_formula( next_state_error );
 
-    assert( _trace_activators.size() == 1 );
+    _one_step_solver.assert_formula( _system->trans() );
 
-    const auto activated_trans = _system->trans().activate( _trans_activator.var() );
-    const auto activated_left_trans = _left_trans.activate( _trace_activators[ 0 ].var() );
-    const auto activated_right_trans = _right_trans.activate( _trace_activators[ 0 ].var() );
-
-    _consecution_solver.assert_formula( activated_trans );
-    _consecution_solver.assert_formula( activated_left_trans );
-    _consecution_solver.assert_formula( activated_right_trans );
+    _two_steps_solver.assert_formula( _left_trans );
+    _two_steps_solver.assert_formula( _right_trans );
 }
 
 auto verifier::check() -> result_t
@@ -298,9 +293,8 @@ bool verifier::has_edge( std::span< const literal > c, std::span< const literal 
     assert( is_state_cube( c ) );
     assert( is_state_cube( d ) );
 
-    return _consecution_solver
+    return get_solver_for( 0 )
            .query()
-           .assume( _trans_activator )
            .assume( c )
            .assume( prime( d ) )
            .is_sat();
@@ -315,12 +309,15 @@ bool verifier::has_middle_point( std::span< const literal > c, std::span< const 
     assert( is_state_cube( d ) );
     assert( level >= 1 && level <= depth() );
 
-    return _consecution_solver
-           .query()
-           .assume( activators_from( level - 1 ) )
-           .assume( c )
-           .assume( prime( d ) )
-           .is_sat();
+    auto builder = get_solver_for( level ).query();
+
+    builder.assume( c )
+           .assume( prime( d ) );
+
+    if ( level > 1 )
+        builder.assume( activators_from( level - 1 ) );
+
+    return builder.is_sat();
 }
 
 bool verifier::has_concrete_edge( const proof_obligation& po )
@@ -331,7 +328,7 @@ bool verifier::has_concrete_edge( const proof_obligation& po )
     if ( has_edge( get_s( po ).literals(), get_t( po ).literals() ) )
     {
         assert( !get_inputs( po ).has_value() );
-        _cexes.get( po.handle() ).input_vars = cube{ _consecution_solver.get_model( _system->input_vars() ), is_sorted };
+        _cexes.get( po.handle() ).input_vars = cube{ get_solver_for( 0 ).get_model( _system->input_vars() ), is_sorted };
 
         return true;
     }
@@ -348,7 +345,7 @@ auto verifier::split_path( const proof_obligation& po )
 
     if ( has_middle_point( get_s( po ).literals(), get_t( po ).literals(), po.level() ) )
     {
-        auto u = cube{ uncircle( _consecution_solver.get_model( _middle_state_vars ) ), is_sorted };
+        auto u = cube{ uncircle( get_solver_for( po.level() ).get_model( _middle_state_vars ) ), is_sorted };
 
         assert( is_state_cube( u.literals() ) );
 
@@ -360,7 +357,7 @@ auto verifier::split_path( const proof_obligation& po )
             auto get_inputs = [ & ]( variable_range original_range )
             {
                 return cube{ shift_literals( original_range, _system->input_vars(),
-                    _consecution_solver.get_model( original_range ) ), is_sorted };
+                    get_solver_for( po.level() ).get_model( original_range ) ), is_sorted };
             };
 
             left_inputs = get_inputs( _left_input_vars );
@@ -415,6 +412,8 @@ std::tuple< cube, cube, int > verifier::generalize_blocked_arrow( const cube& s,
     assert( 1 <= level && level <= depth() );
     assert( is_state_cube( s.literals() ) );
     assert( is_state_cube( t.literals() ) );
+    // CONTRACT: The previous SAT call was has_middle_point and it
+    //           returned false.
 
     // TODO: It would be good to have a switch that controls whether
     //       we prefer smaller s cubes or smaller t cubes. Also in
@@ -489,13 +488,14 @@ std::tuple< cube, cube, int > verifier::generalize_from_core( const cube& s, con
     assert( 1 <= level && level <= depth() );
     assert( is_state_cube( s.literals() ) );
     assert( is_state_cube( t.literals() ) );
-    // CONTRACT: The previous SAT call was has_middle_point.
+    // CONTRACT: The previous SAT call was has_middle_point and it
+    //           returned false.
 
     // TODO: Try to raise the level, or just remove the parameter
     //       from the function.
 
-    auto c = _consecution_solver.get_core( s.literals() );
-    auto d = _consecution_solver.get_core_mapped( t.literals(), [ & ]( literal lit ){ return prime( lit ); } );
+    auto c = get_solver_for( level ).get_core( s.literals() );
+    auto d = get_solver_for( level ).get_core_mapped( t.literals(), [ & ]( literal lit ){ return prime( lit ); } );
 
     // Cores ensure that
     //   c /\ TF[ k - 1 ]( X, X° ) /\ TF[ k - 1 ]( X°, X' ) /\ d'
@@ -509,8 +509,8 @@ std::tuple< cube, cube, int > verifier::generalize_from_core( const cube& s, con
 
     while ( has_edge( c, d ) )
     {
-        const auto ss = _consecution_solver.get_model( _system->state_vars() );
-        const auto tt = unprime( _consecution_solver.get_model( _system->next_state_vars() ) );
+        const auto ss = get_solver_for( 0 ).get_model( _system->state_vars() );
+        const auto tt = unprime( get_solver_for( 0 ).get_model( _system->next_state_vars() ) );
 
         const auto c_conflict = find_conflict_sorted( s.literals(), ss );
         const auto d_conflict = find_conflict_sorted( t.literals(), tt );
