@@ -415,57 +415,42 @@ std::tuple< cube, cube, int > verifier::generalize_blocked_arrow( const cube& s,
     // CONTRACT: The previous SAT call was has_middle_point and it
     //           returned false.
 
-    // TODO: It would be good to have a switch that controls whether
-    //       we prefer smaller s cubes or smaller t cubes. Also in
-    //       generalize_from_core below.
-
     auto [ c0, d0, block_at ] = generalize_from_core( s, t, level );
+    auto c = std::move( c0 ).literals();
+    auto d = std::move( d0 ).literals();
 
-    auto c = c0.literals();
-    auto d = d0.literals();
-
-    const auto all_literals = [ & ]
+    auto try_drop_literals = [ & ]( std::vector< literal >& drop_from )
     {
-        auto res = std::vector< std::pair< bool, literal > >{};
-        res.reserve( c.size() + d.size() );
-
-        for ( const auto lit : c )
-            res.emplace_back( true, lit );
-        for ( const auto lit : d )
-            res.emplace_back( false, lit );
-
-        std::ranges::shuffle( res, _random );
-
-        return res;
-    }();
-
-    // TODO: Ugly cube->vector->cube back and forth transformation.
-
-    const auto drop_and_try = [ & ]( std::vector< literal >& drop_from, literal lit )
-    {
-        if ( const auto erased = std::erase( drop_from, lit ); erased == 0 )
-            return;
-
-        if ( intersects_sorted( c, d ) || has_edge( c, d ) || has_middle_point( c, d, level ) )
+        for ( const auto original = drop_from; const auto lit : drop_from )
         {
-            insert_sorted( drop_from, lit );
-        }
-        else
-        {
-            auto [ c1, d1, block_at_1 ] = generalize_from_core( cube{ c }, cube{ d }, level );
+            if ( const auto erased = std::erase( drop_from, lit ); erased == 0 )
+                continue;
 
-            c = std::move( c1 ).literals();
-            d = std::move( d1 ).literals();
-            block_at = block_at_1; // NOLINT: Nonsense lint about C++14-style templates
+            if ( intersects_sorted( c, d ) || has_edge( c, d ) || has_middle_point( c, d, level ) )
+            {
+                insert_sorted( drop_from, lit );
+            }
+            else
+            {
+                // TODO: We want to pass a span here!
+                auto [ new_c, new_d, new_block_at ] = generalize_from_core( cube{ c }, cube{ d }, level );
+
+                c = std::move( new_c ).literals();
+                d = std::move( new_d ).literals();
+                block_at = new_block_at; // NOLINT: Nonsense lint about C++14-style templates
+            }
         }
     };
 
-    for ( const auto [ in_c, lit ] : all_literals )
+    if ( _generalization_preference == generalization_preference::left )
     {
-        if ( in_c )
-            drop_and_try( c, lit );
-        else
-            drop_and_try( d, lit );
+        try_drop_literals( c );
+        try_drop_literals( d );
+    }
+    else
+    {
+        try_drop_literals( d );
+        try_drop_literals( c );
     }
 
     // TODO: Try to raise the level.
@@ -505,8 +490,6 @@ std::tuple< cube, cube, int > verifier::generalize_from_core( const cube& s, con
 
     // Let us first ensure that c /\ T( X, Y, X' ) /\ d' is unsatisfiable.
 
-    auto add_to_c = std::bernoulli_distribution{ 0.5 }; // NOLINT: 0.5 is a self-explanatory probability
-
     while ( has_edge( c, d ) )
     {
         const auto ss = get_solver_for( 0 ).get_model( _system->state_vars() );
@@ -517,7 +500,7 @@ std::tuple< cube, cube, int > verifier::generalize_from_core( const cube& s, con
 
         if ( c_conflict.has_value() && d_conflict.has_value() )
         {
-            if ( add_to_c( _random ) )
+            if ( _generalization_preference == generalization_preference::right )
                 c.push_back( *c_conflict );
             else
                 d.push_back( *d_conflict );
@@ -551,21 +534,32 @@ std::tuple< cube, cube, int > verifier::generalize_from_core( const cube& s, con
         // therefore generalized), since (s, t) would contain an identity
         // arrow.
 
-        if ( const auto diff1 = find_conflict_sorted( s.literals(), d ); diff1.has_value() )
+        auto insert_into_both = [ & ]
         {
-            insert_sorted( c, *diff1 );
-        }
-        else if ( const auto diff2 = find_conflict_sorted( c, t.literals() ); diff2.has_value() )
+            const auto diff = find_conflict_sorted( s.literals(), t.literals() );
+            assert( diff.has_value() );
+
+            insert_sorted( c, *diff );
+            insert_sorted( d, !*diff );
+        };
+
+        if ( _generalization_preference == generalization_preference::right )
         {
-            insert_sorted( d, !*diff2 );
+            if ( const auto diff1 = find_conflict_sorted( s.literals(), d ); diff1.has_value() )
+                insert_sorted( c, *diff1 );
+            else if ( const auto diff2 = find_conflict_sorted( c, t.literals() ); diff2.has_value() )
+                insert_sorted( d, !*diff2 );
+            else
+                insert_into_both();
         }
         else
         {
-            const auto diff3 = find_conflict_sorted( s.literals(), t.literals() );
-            assert( diff3.has_value() );
-
-            insert_sorted( c, *diff3 );
-            insert_sorted( d, !*diff3 );
+            if ( const auto diff1 = find_conflict_sorted( c, t.literals() ); diff1.has_value() )
+                insert_sorted( d, !*diff1 );
+            else if ( const auto diff2 = find_conflict_sorted( s.literals(), d ); diff2.has_value() )
+                insert_sorted( c, *diff2 );
+            else
+                insert_into_both();
         }
     }
 

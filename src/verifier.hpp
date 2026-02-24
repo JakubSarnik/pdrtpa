@@ -5,7 +5,6 @@
 #include "solver.hpp"
 #include <vector>
 #include <optional>
-#include <random>
 #include <tuple>
 
 using cex_handle = std::size_t;
@@ -64,6 +63,15 @@ public:
     [[nodiscard]] cex_handle handle() const { return _handle; }
 };
 
+// When generalizing an arrow s -> t to c -> d, generalization_preference::left
+// means that we want to keep the cube c smaller (and symmetrically for
+// ...::right).
+enum class generalization_preference
+{
+    left,
+    right
+};
+
 class verifier
 {
 public:
@@ -71,7 +79,6 @@ public:
 
 private:
     variable_store* _store;
-    std::default_random_engine _random;
 
     // We need to solve the following types of formulae:
     //   1. I(X) /\ TF[i](X, X') /\ ~P(X') in the main loop (blocking phase)
@@ -114,6 +121,8 @@ private:
     std::vector< std::vector< std::pair< cube, cube > > > _trace_blocked_arrows;
     std::vector< literal > _trace_activators;
     cex_pool _cexes;
+
+    generalization_preference _generalization_preference;
 
     [[nodiscard]] int depth() const
     {
@@ -280,9 +289,8 @@ private:
     [[nodiscard]] [[maybe_unused]] bool is_input_cube( std::span< const literal > literals ) const;
 
 public:
-    explicit verifier( variable_store& store, const transition_system& system, unsigned int seed ) :
+    explicit verifier( variable_store& store, const transition_system& system, generalization_preference preference ) :
         _store{ &store },
-        _random{ seed },
         _system{ &system },
         _init_cube{ system.init().as_cube() },
         _middle_state_vars{ store.make_range( system.state_vars().size() ) },
@@ -290,7 +298,8 @@ public:
         _right_input_vars( store.make_range( system.input_vars().size() ) ),
         _right_aux_vars( store.make_range( system.aux_vars().size() ) ),
         _left_trans{ system.trans().map( [ & ]( literal l ){ return make_left_trans( l ); } ) },
-        _right_trans{ system.trans().map( [ & ]( literal l ){ return make_right_trans( l ); } ) }
+        _right_trans{ system.trans().map( [ & ]( literal l ){ return make_right_trans( l ); } ) },
+        _generalization_preference{ preference }
     {}
 
     verifier( const verifier& ) = delete;

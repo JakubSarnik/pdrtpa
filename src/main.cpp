@@ -53,36 +53,13 @@ std::string format_witness( const transition_system& sys, const verifier::result
     return witness;
 }
 
-unsigned int get_seed( const std::optional< std::string >& seed_string )
-{
-    if ( seed_string.has_value() )
-    {
-        auto view = std::string_view{ *seed_string };
-        constexpr auto prefix = std::string_view{ "-s" };
-
-        assert( view.starts_with( prefix ) );
-        view.remove_prefix( prefix.size() );
-
-        const auto last = view.data() + view.size(); // NOLINT: Pointer arithmetic needed by the API.
-        unsigned int result = 0;
-
-        // NOLINTNEXTLINE: We do not care about null termination here at all.
-        const auto [ ptr, ec ] = std::from_chars( view.data(), last, result );
-
-        if ( ec == std::errc{} && ptr == last ) // NOLINT: errc can be value-initialized.
-            return result;
-    }
-
-    return std::random_device{}();
-}
-
 }
 
 int main( int argc, char** argv ) // NOLINT: Don't care about bad_alloc's here.
 {
     auto verbosity = verbosity_level::silent;
     auto input_path = std::optional< std::string >{};
-    auto seed_string = std::optional< std::string >{};
+    auto generalization_preference = generalization_preference::right; // TODO: Choose a default.
 
     for ( int i = 1; i < argc; ++i )
     {
@@ -98,9 +75,13 @@ int main( int argc, char** argv ) // NOLINT: Don't care about bad_alloc's here.
             {
                 verbosity = verbosity_level::debug;
             }
-            else if ( arg.starts_with( "-s" ) )
+            else if ( arg == "--left" )
             {
-                seed_string = arg;
+                generalization_preference = generalization_preference::left;
+            }
+            else if ( arg == "--right" )
+            {
+                generalization_preference = generalization_preference::right;
             }
             else if ( arg == "-h" || arg == "--help" )
             {
@@ -129,9 +110,8 @@ int main( int argc, char** argv ) // NOLINT: Don't care about bad_alloc's here.
 
     logger::set_verbosity( verbosity );
 
-    const auto seed = get_seed( seed_string );
-
-    logger::log_line_loud( "Randomness seed: {}", seed );
+    logger::log_line_loud( "Generalization preference: {}",
+        generalization_preference == generalization_preference::left ? "left" : "right" );
     logger::log_loud( "Loading aig from file... " );
 
     auto aig = make_aiger();
@@ -167,7 +147,7 @@ int main( int argc, char** argv ) // NOLINT: Don't care about bad_alloc's here.
     logger::log_line_loud( "Running..." );
     logger::log_debug( "\n" );
 
-    auto engine = verifier{ store, simplified_system, seed };
+    auto engine = verifier{ store, simplified_system, generalization_preference };
     const auto result = engine.run();
 
     logger::log_debug( "\n" );
