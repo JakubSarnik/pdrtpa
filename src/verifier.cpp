@@ -277,8 +277,8 @@ bool verifier::solve_obligation( const proof_obligation& po )
 
     const auto [ c, d, block_at ] = generalize_blocked_arrow( get_s( po ), get_t( po ), po.level() );
 
-    logger::log_line_debug( "{}: c = {}", po.level(), c.to_string() );
-    logger::log_line_debug( "{}  d = {}", std::string( std::to_string( po.level() ).size(), ' '), d.to_string() );
+    logger::log_line_debug( "{}: c = {}", block_at, c.to_string() );
+    logger::log_line_debug( "{}  d = {}", std::string( std::to_string( block_at ).size(), ' '), d.to_string() );
 
     block_arrow_at( c, d, block_at );
 
@@ -307,7 +307,7 @@ bool verifier::has_middle_point( std::span< const literal > c, std::span< const 
 {
     assert( is_state_cube( c ) );
     assert( is_state_cube( d ) );
-    assert( level >= 1 && level <= depth() );
+    assert( level >= 1 && level <= depth() + 1 );
 
     auto builder = get_solver_for( level ).query();
 
@@ -452,11 +452,13 @@ std::tuple< cube, cube, int > verifier::generalize_blocked_arrow( const cube& s,
         }
         else
         {
-            auto [ c1, d1, block_at_1 ] = generalize_from_core( cube{ c }, cube{ d }, level );
+            // TODO: Simplify generalize_from_core API to take spans and return
+            //       vectors. Then, change this to std::tie (also below).
+            auto [ c1, d1, block_at_1 ] = generalize_from_core( cube{ c }, cube{ d }, block_at );
 
             c = std::move( c1 ).literals();
             d = std::move( d1 ).literals();
-            block_at = block_at_1; // NOLINT: Nonsense lint about C++14-style templates
+            block_at = block_at_1;
         }
     };
 
@@ -468,9 +470,21 @@ std::tuple< cube, cube, int > verifier::generalize_blocked_arrow( const cube& s,
             drop_and_try( d, lit );
     }
 
-    // TODO: Try to raise the level.
+    while ( block_at <= depth() )
+    {
+        if ( !has_middle_point( c, d, block_at + 1 ) )
+        {
+            auto [ c1, d1, block_at_1 ] = generalize_from_core( cube{ c }, cube{ d }, block_at + 1 );
 
-    return { cube{ c }, cube{ d }, level };
+            c = std::move( c1 ).literals();
+            d = std::move( d1 ).literals();
+            block_at = block_at_1;
+        }
+        else
+            break;
+    }
+
+    return { cube{ c }, cube{ d }, std::min( block_at, depth() ) };
 }
 
 std::tuple< cube, cube, int > verifier::generalize_from_core( const cube& s, const cube& t, int level )
@@ -569,6 +583,29 @@ std::tuple< cube, cube, int > verifier::generalize_from_core( const cube& s, con
         }
     }
 
+    int block_at = level;
+
+    if ( level > 1 )
+    {
+        block_at = depth();
+
+        for ( int i = level - 1; i <= depth(); ++i )
+        {
+            if ( get_solver_for( level ).is_in_core( _trace_activators[ i ] ) )
+            {
+                block_at = i;
+                break;
+            }
+        }
+
+        ++block_at;
+    }
+
+    block_at = std::min( block_at, depth() );
+
+    assert( level <= block_at );
+    assert( 1 <= block_at && block_at <= depth() );
+
     assert( !intersects_sorted( c, d ) );
     assert( !has_edge( c, d ) );
 
@@ -576,9 +613,9 @@ std::tuple< cube, cube, int > verifier::generalize_from_core( const cube& s, con
     //   c /\ TF[ k - 1 ]( X, X° ) /\ TF[ k - 1 ]( X°, X' ) /\ d'
     // must still be unsatisfiable.
 
-    assert( !has_middle_point( c, d, level ) );
+    assert( !has_middle_point( c, d, block_at ) );
 
-    return { cube{ std::move( c ), is_sorted }, cube{ std::move( d ), is_sorted }, level };
+    return { cube{ std::move( c ), is_sorted }, cube{ std::move( d ), is_sorted }, block_at };
 }
 
 void verifier::block_arrow_at( const cube& s, const cube& t, int level, int start_from /* = 1 */ )

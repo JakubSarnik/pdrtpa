@@ -239,7 +239,7 @@ private:
 
     solver& get_solver_for( int level )
     {
-        assert( 0 <= level && level <= depth() );
+        assert( level >= 0 );
 
         switch ( level )
         {
