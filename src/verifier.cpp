@@ -275,12 +275,16 @@ bool verifier::solve_obligation( const proof_obligation& po )
         }
     }
 
-    const auto [ c, d, block_at ] = generalize_blocked_arrow( get_s( po ), get_t( po ), po.level() );
+    auto [ c_vec, d_vec, block_at ] =
+        generalize_blocked_arrow( get_s( po ).literals(), get_t( po ).literals(), po.level() );
+
+    auto c = cube{ std::move( c_vec ), is_sorted };
+    auto d = cube{ std::move( d_vec ), is_sorted };
 
     logger::log_line_debug( "{}: c = {}", po.level(), c.to_string() );
     logger::log_line_debug( "{}  d = {}", std::string( std::to_string( po.level() ).size(), ' '), d.to_string() );
 
-    block_arrow_at( c, d, block_at );
+    block_arrow_at( std::move( c ), std::move( d ), block_at );
 
     return false;
 }
@@ -407,11 +411,12 @@ auto verifier::split_obligation( const proof_obligation& po )
     } );
 }
 
-std::tuple< cube, cube, int > verifier::generalize_blocked_arrow( const cube& s, const cube& t, int level )
+auto verifier::generalize_blocked_arrow( std::span< const literal > s, std::span< const literal > t, int level )
+    -> std::tuple< std::vector< literal >, std::vector< literal >, int >
 {
     assert( 1 <= level && level <= depth() );
-    assert( is_state_cube( s.literals() ) );
-    assert( is_state_cube( t.literals() ) );
+    assert( is_state_cube( s ) );
+    assert( is_state_cube( t ) );
     // CONTRACT: The previous SAT call was has_middle_point and it
     //           returned false.
 
@@ -419,10 +424,7 @@ std::tuple< cube, cube, int > verifier::generalize_blocked_arrow( const cube& s,
     //       we prefer smaller s cubes or smaller t cubes. Also in
     //       generalize_from_core below.
 
-    auto [ c0, d0, block_at ] = generalize_from_core( s, t, level );
-
-    auto c = c0.literals();
-    auto d = d0.literals();
+    auto [ c, d, block_at ] = generalize_from_core( s, t, level );
 
     const auto all_literals = [ & ]
     {
@@ -439,25 +441,15 @@ std::tuple< cube, cube, int > verifier::generalize_blocked_arrow( const cube& s,
         return res;
     }();
 
-    // TODO: Ugly cube->vector->cube back and forth transformation.
-
     const auto drop_and_try = [ & ]( std::vector< literal >& drop_from, literal lit )
     {
         if ( const auto erased = std::erase( drop_from, lit ); erased == 0 )
             return;
 
         if ( intersects_sorted( c, d ) || has_edge( c, d ) || has_middle_point( c, d, level ) )
-        {
             insert_sorted( drop_from, lit );
-        }
         else
-        {
-            auto [ c1, d1, block_at_1 ] = generalize_from_core( cube{ c }, cube{ d }, level );
-
-            c = std::move( c1 ).literals();
-            d = std::move( d1 ).literals();
-            block_at = block_at_1;
-        }
+            std::tie( c, d, block_at ) = generalize_from_core( c, d, level );
     };
 
     for ( const auto [ in_c, lit ] : all_literals )
@@ -470,10 +462,11 @@ std::tuple< cube, cube, int > verifier::generalize_blocked_arrow( const cube& s,
 
     // TODO: Try to raise the level.
 
-    return { cube{ c }, cube{ d }, level };
+    return { std::move( c ), std::move( d ), level };
 }
 
-std::tuple< cube, cube, int > verifier::generalize_from_core( const cube& s, const cube& t, int level )
+auto verifier::generalize_from_core( std::span< const literal > s, std::span< const literal > t, int level )
+        -> std::tuple< std::vector< literal >, std::vector< literal >, int >
 {
     // We know that:
     // - s /\ TF[ 0 ] /\ t' is unsatisfiable, i.e.
@@ -486,16 +479,16 @@ std::tuple< cube, cube, int > verifier::generalize_from_core( const cube& s, con
     // and d for t.
 
     assert( 1 <= level && level <= depth() );
-    assert( is_state_cube( s.literals() ) );
-    assert( is_state_cube( t.literals() ) );
+    assert( is_state_cube( s ) );
+    assert( is_state_cube( t ) );
     // CONTRACT: The previous SAT call was has_middle_point and it
     //           returned false.
 
     // TODO: Try to raise the level, or just remove the parameter
     //       from the function.
 
-    auto c = get_solver_for( level ).get_core( s.literals() );
-    auto d = get_solver_for( level ).get_core_mapped( t.literals(), [ & ]( literal lit ){ return prime( lit ); } );
+    auto c = get_solver_for( level ).get_core( s );
+    auto d = get_solver_for( level ).get_core_mapped( t, [ & ]( literal lit ){ return prime( lit ); } );
 
     // Cores ensure that
     //   c /\ TF[ k - 1 ]( X, X° ) /\ TF[ k - 1 ]( X°, X' ) /\ d'
@@ -512,8 +505,8 @@ std::tuple< cube, cube, int > verifier::generalize_from_core( const cube& s, con
         const auto ss = get_solver_for( 0 ).get_model( _system->state_vars() );
         const auto tt = unprime( get_solver_for( 0 ).get_model( _system->next_state_vars() ) );
 
-        const auto c_conflict = find_conflict_sorted( s.literals(), ss );
-        const auto d_conflict = find_conflict_sorted( t.literals(), tt );
+        const auto c_conflict = find_conflict_sorted( s, ss );
+        const auto d_conflict = find_conflict_sorted( t, tt );
 
         if ( c_conflict.has_value() && d_conflict.has_value() )
         {
@@ -551,17 +544,17 @@ std::tuple< cube, cube, int > verifier::generalize_from_core( const cube& s, con
         // therefore generalized), since (s, t) would contain an identity
         // arrow.
 
-        if ( const auto diff1 = find_conflict_sorted( s.literals(), d ); diff1.has_value() )
+        if ( const auto diff1 = find_conflict_sorted( s, d ); diff1.has_value() )
         {
             insert_sorted( c, *diff1 );
         }
-        else if ( const auto diff2 = find_conflict_sorted( c, t.literals() ); diff2.has_value() )
+        else if ( const auto diff2 = find_conflict_sorted( c, t ); diff2.has_value() )
         {
             insert_sorted( d, !*diff2 );
         }
         else
         {
-            const auto diff3 = find_conflict_sorted( s.literals(), t.literals() );
+            const auto diff3 = find_conflict_sorted( s, t );
             assert( diff3.has_value() );
 
             insert_sorted( c, *diff3 );
@@ -578,10 +571,10 @@ std::tuple< cube, cube, int > verifier::generalize_from_core( const cube& s, con
 
     assert( !has_middle_point( c, d, level ) );
 
-    return { cube{ std::move( c ), is_sorted }, cube{ std::move( d ), is_sorted }, level };
+    return { std::move( c ), std::move( d ), level };
 }
 
-void verifier::block_arrow_at( const cube& s, const cube& t, int level, int start_from /* = 1 */ )
+void verifier::block_arrow_at( cube s, cube t, int level, int start_from /* = 1 */ )
 {
     assert( 1 <= level && level <= depth() );
     assert( 1 <= start_from && start_from <= level );
@@ -612,13 +605,13 @@ void verifier::block_arrow_at( const cube& s, const cube& t, int level, int star
     assert( level < _trace_blocked_arrows.size() );
     assert( level < _trace_activators.size() );
 
-    _trace_blocked_arrows[ level ].emplace_back( s, t );
-
     const auto v = _trace_activators[ level ].var();
 
     _error_solver.assert_formula( union_sorted( s.literals(), prime( t.literals() ) ).negate().activate( v ) );
     _consecution_solver.assert_formula( union_sorted( s.literals(), circle( t.literals() ) ).negate().activate( v ) );
     _consecution_solver.assert_formula( union_sorted( prime( t.literals() ), circle( s.literals() ) ).negate().activate( v ) );
+
+    _trace_blocked_arrows[ level ].emplace_back( std::move( s ), std::move( t ) );
 }
 
 std::vector< std::vector< literal > > verifier::build_counterexample( cex_handle root )
@@ -676,8 +669,8 @@ bool verifier::propagate()
         {
             if ( !has_middle_point( c.literals(), d.literals(), i + 1 ) )
             {
-                auto [ gen_c, gen_d, gen_level ] = generalize_from_core( c, d, i + 1 );
-                block_arrow_at( gen_c, gen_d, gen_level, i );
+                auto [ gen_c, gen_d, gen_level ] = generalize_from_core( c.literals(), d.literals(), i + 1 );
+                block_arrow_at( cube{ std::move( gen_c ), is_sorted }, cube{ std::move( gen_d ), is_sorted }, gen_level, i );
             }
         }
 
