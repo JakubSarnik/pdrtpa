@@ -456,7 +456,7 @@ std::tuple< cube, cube, int > verifier::generalize_blocked_arrow( const cube& s,
 
             c = std::move( c1 ).literals();
             d = std::move( d1 ).literals();
-            block_at = block_at_1; // NOLINT: Nonsense lint about C++14-style templates
+            block_at = block_at_1;
         }
     };
 
