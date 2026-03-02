@@ -498,29 +498,23 @@ auto verifier::generalize_from_core( std::span< const literal > s, std::span< co
 
     // Let us first ensure that c /\ T( X, Y, X' ) /\ d' is unsatisfiable.
 
-    auto add_to_c = std::bernoulli_distribution{ 0.5 }; // NOLINT: 0.5 is a self-explanatory probability
-
     while ( has_edge( c, d ) )
     {
+        // TODO: We might sometimes want to prefer adding the literal to d
+        //       instead of c.
+
         const auto ss = get_solver_for( 0 ).get_model( _system->state_vars() );
-        const auto tt = unprime( get_solver_for( 0 ).get_model( _system->next_state_vars() ) );
-
         const auto c_conflict = find_conflict_sorted( s, ss );
-        const auto d_conflict = find_conflict_sorted( t, tt );
 
-        if ( c_conflict.has_value() && d_conflict.has_value() )
-        {
-            if ( add_to_c( _random ) )
-                c.push_back( *c_conflict );
-            else
-                d.push_back( *d_conflict );
-        }
-        else if ( c_conflict.has_value() )
+        if ( c_conflict.has_value() )
         {
             c.push_back( *c_conflict );
         }
         else
         {
+            const auto tt = unprime( get_solver_for( 0 ).get_model( _system->next_state_vars() ) );
+            const auto d_conflict = find_conflict_sorted( t, tt );
+
             assert( d_conflict.has_value() );
             d.push_back( *d_conflict );
         }
