@@ -437,11 +437,11 @@ auto verifier::generalize_blocked_arrow( std::span< const literal > s, std::span
             std::tie( c, d, block_at ) = generalize_from_core( c, d, level );
     };
 
-    for ( const auto lit : original_d )
-        try_drop( d, lit );
-
     for ( const auto lit : original_c )
         try_drop( c, lit );
+
+    for ( const auto lit : original_d )
+        try_drop( d, lit );
 
     // TODO: Try to raise the level.
 
