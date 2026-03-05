@@ -420,28 +420,15 @@ auto verifier::generalize_blocked_arrow( std::span< const literal > s, std::span
     // CONTRACT: The previous SAT call was has_middle_point and it
     //           returned false.
 
-    // TODO: It would be good to have a switch that controls whether
-    //       we prefer smaller s cubes or smaller t cubes. Also in
-    //       generalize_from_core below.
-
     auto [ c, d, block_at ] = generalize_from_core( s, t, level );
 
-    const auto all_literals = [ & ]
-    {
-        auto res = std::vector< std::pair< bool, literal > >{};
-        res.reserve( c.size() + d.size() );
+    auto original_c = c;
+    auto original_d = d;
 
-        for ( const auto lit : c )
-            res.emplace_back( true, lit );
-        for ( const auto lit : d )
-            res.emplace_back( false, lit );
+    std::ranges::shuffle( original_c, _random );
+    std::ranges::shuffle( original_d, _random );
 
-        std::ranges::shuffle( res, _random );
-
-        return res;
-    }();
-
-    const auto drop_and_try = [ & ]( std::vector< literal >& drop_from, literal lit )
+    const auto try_drop = [ & ]( std::vector< literal >& drop_from, literal lit )
     {
         if ( const auto erased = std::erase( drop_from, lit ); erased == 0 )
             return;
@@ -452,13 +439,11 @@ auto verifier::generalize_blocked_arrow( std::span< const literal > s, std::span
             std::tie( c, d, block_at ) = generalize_from_core( c, d, level );
     };
 
-    for ( const auto [ in_c, lit ] : all_literals )
-    {
-        if ( in_c )
-            drop_and_try( c, lit );
-        else
-            drop_and_try( d, lit );
-    }
+    for ( const auto lit : original_d )
+        try_drop( d, lit );
+
+    for ( const auto lit : original_c )
+        try_drop( c, lit );
 
     // TODO: Try to raise the level.
 
