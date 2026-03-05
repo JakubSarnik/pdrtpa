@@ -483,8 +483,11 @@ auto verifier::generalize_from_core( std::span< const literal > s, std::span< co
 
     while ( has_edge( c, d ) )
     {
-        // TODO: We might sometimes want to prefer adding the literal to d
-        //       instead of c.
+        // Small experiments suggest that preference for adding to c is a more
+        // performant strategy than preferring d (or tossing a coin). There
+        // are, however, some benchmarks where that is not the case, but we
+        // know of no heuristic that would choose this dynamically and more
+        // intelligently.
 
         const auto ss = get_solver_for( 0 ).get_model( _system->state_vars() );
         const auto c_conflict = find_conflict_sorted( s, ss );
