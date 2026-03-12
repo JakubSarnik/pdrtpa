@@ -369,8 +369,10 @@ auto verifier::split_path( const proof_obligation& po )
             assert( is_input_cube( right_inputs->literals() ) );
         }
 
-        // TODO: Copying of the state cubes here is a bit ugly. Can't
-        //       we store cubes in a pool?
+        // Cubes are copied here, but we tried a version with cubes stored in
+        // a pool and benchmarked runtimes were basically identical at the cost
+        // of more convoluted code.
+
         const auto left = _cexes.make( get_s( po ), u, std::move( left_inputs ) );
         const auto right = _cexes.make( std::move( u ), get_t( po ), std::move( right_inputs ) );
 
