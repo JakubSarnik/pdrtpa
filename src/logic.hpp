@@ -297,8 +297,6 @@ public:
 //   2, 1
 //   -2, 1, 3
 //   1, -1, 2, 3
-// TODO: Check whether we want this, perhaps it's needlessly complicated and
-//       the usual integer ordering suffices?
 
 inline bool cube_literal_lt( literal l1, literal l2 )
 {
