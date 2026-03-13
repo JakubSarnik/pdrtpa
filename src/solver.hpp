@@ -148,9 +148,6 @@ public:
         return val;
     }
 
-    // TODO: Add a get_model_mapped, get rid of unprime's and uncircle's
-    //       in the verifier.
-
     [[nodiscard]]
     bool is_in_core( literal lit )
     {
