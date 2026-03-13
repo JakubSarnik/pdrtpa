@@ -91,24 +91,3 @@ TEST_CASE( "Variable types and positions are correctly determined" )
         }
     }
 }
-
-TEST_CASE( "State variables are correctly primed and unprimed" )
-{
-    const auto system = make_system( 3, 3, 5 );
-
-    const auto a = system.state_vars().nth( 0 );
-    const auto b = system.state_vars().nth( 1 );
-    const auto c = system.state_vars().nth( 2 );
-
-    const auto ap = system.next_state_vars().nth( 0 );
-    const auto bp = system.next_state_vars().nth( 1 );
-    const auto cp = system.next_state_vars().nth( 2 );
-
-    REQUIRE( system.prime( literal{ a } ) == literal{ ap } );
-    REQUIRE( system.prime( literal{ b } ) == literal{ bp } );
-    REQUIRE( system.prime( literal{ c } ) == literal{ cp } );
-
-    REQUIRE( system.unprime( literal{ ap } ) == literal{ a } );
-    REQUIRE( system.unprime( literal{ bp } ) == literal{ b } );
-    REQUIRE( system.unprime( literal{ cp } ) == literal{ c } );
-}

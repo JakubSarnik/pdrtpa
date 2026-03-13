@@ -101,7 +101,7 @@ void verifier::initialize()
         const auto [ type, pos ] = _system->get_var_info( lit.var() );
 
         if ( type == var_type::state )
-            return _system->prime( lit );
+            return prime( lit );
         else
             return lit;
     } );
@@ -171,7 +171,7 @@ auto verifier::check_trivial_cases() -> result_t
             switch ( type )
             {
                 case var_type::state:
-                    return _system->prime( lit );
+                    return prime( lit );
                 case var_type::input:
                     return lit.substitute( _right_input_vars.nth( pos ) );
                 default:
