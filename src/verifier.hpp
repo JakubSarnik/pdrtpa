@@ -19,8 +19,6 @@ struct cex_entry
     std::optional< cex_handle > right;
 };
 
-// TODO: Make this safer and/or more efficient?
-// TODO: Better yet, try a simple shared_ptr structure...
 class cex_pool
 {
     std::vector< cex_entry > _entries;
