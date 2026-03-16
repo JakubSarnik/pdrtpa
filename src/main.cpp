@@ -3,7 +3,7 @@
 #include "transition_system.hpp"
 #include "logger.hpp"
 #include "aiger_builder.hpp"
-#include "verifier.hpp"
+#include "verifier_split.hpp"
 #include "simplifier.hpp"
 #include <print>
 #include <string>
@@ -167,7 +167,7 @@ int main( int argc, char** argv ) // NOLINT: Don't care about bad_alloc's here.
     logger::log_line_loud( "Running..." );
     logger::log_debug( "\n" );
 
-    auto engine = verifier{ store, simplified_system, seed };
+    auto engine = verifier_split{ store, simplified_system, seed };
     const auto result = engine.run();
 
     logger::log_debug( "\n" );
