@@ -266,7 +266,7 @@ private:
     auto generalize_blocked_equality_arrow( std::span< const literal > s, std::span< const literal > t, int level )
         -> std::tuple< std::vector< literal >, std::vector< literal >, int >;
     auto equality_generalize_from_core( std::span< const literal > s, std::span< const literal > t, int level )
-        -> std::tuple< std::vector< literal >, std::vector< literal >, int >;
+        -> std::tuple< std::vector< literal >, std::vector< literal > >;
 
     auto generalize_blocked_less_than_arrow( std::span< const literal > s, std::span< const literal > t, int level )
         -> std::tuple< std::vector< literal >, std::vector< literal >, int >;

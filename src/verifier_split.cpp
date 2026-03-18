@@ -561,7 +561,7 @@ auto verifier_split::generalize_blocked_equality_arrow( std::span< const literal
     // CONTRACT: The previous SAT call was has_equality_middle_point and it
     //           returned false.
 
-    auto [ c, d, block_at ] = equality_generalize_from_core( s, t, level );
+    auto [ c, d ] = equality_generalize_from_core( s, t, level );
 
     auto original_c = c;
     auto original_d = d;
@@ -577,7 +577,7 @@ auto verifier_split::generalize_blocked_equality_arrow( std::span< const literal
         if ( has_edge( c, d ) || has_equality_middle_point( c, d, level ) )
             insert_sorted( drop_from, lit );
         else
-            std::tie( c, d, block_at ) = equality_generalize_from_core( c, d, level );
+            std::tie( c, d  ) = equality_generalize_from_core( c, d, level );
     };
 
     for ( const auto lit : original_c )
@@ -586,12 +586,15 @@ auto verifier_split::generalize_blocked_equality_arrow( std::span< const literal
     for ( const auto lit : original_d )
         try_drop( d, lit );
 
-    // TODO: Try to raise the level.
+    auto block_at = level;
 
     while ( block_at <= depth() )
     {
         if ( !has_equality_middle_point( c, d, block_at + 1 ) )
-            std::tie( c, d, block_at ) = equality_generalize_from_core( c, d, block_at + 1 );
+        {
+            std::tie( c, d ) = equality_generalize_from_core( c, d, block_at + 1 );
+            ++block_at;
+        }
         else
             break;
     }
@@ -600,7 +603,7 @@ auto verifier_split::generalize_blocked_equality_arrow( std::span< const literal
 }
 
 auto verifier_split::equality_generalize_from_core( std::span< const literal > s, std::span< const literal > t, int level )
-    -> std::tuple< std::vector< literal >, std::vector< literal >, int >
+    -> std::tuple< std::vector< literal >, std::vector< literal > >
 {
     // We know that:
     // - s /\ TF=[ 0 ] /\ t' is unsatisfiable, i.e.
@@ -617,9 +620,6 @@ auto verifier_split::equality_generalize_from_core( std::span< const literal > s
     assert( is_state_cube( t ) );
     // CONTRACT: The previous SAT call was has_equality_middle_point and it
     //           returned false.
-
-    // TODO: Try to raise the level, or just remove the parameter
-    //       from the function.
 
     auto c = get_equality_solver_for( level ).get_core( s );
     auto d = get_equality_solver_for( level ).get_core_mapped( t, [ & ]( literal lit ){ return prime( lit ); } );
@@ -663,7 +663,7 @@ auto verifier_split::equality_generalize_from_core( std::span< const literal > s
 
     assert( !has_equality_middle_point( c, d, level ) );
 
-    return { std::move( c ), std::move( d ), level };
+    return { std::move( c ), std::move( d ) };
 }
 
 auto verifier_split::generalize_blocked_less_than_arrow( std::span< const literal > s, std::span< const literal > t, int level )
@@ -721,9 +721,6 @@ auto verifier_split::less_than_generalize_from_core( std::span< const literal > 
     assert( is_state_cube( t ) );
     // CONTRACT: The previous SAT call was has_less_than_middle_point and it
     //           returned false.
-
-    // TODO: Try to raise the level, or just remove the parameter
-    //       from the function.
 
     auto c = get_less_than_solver_for( level ).get_core( s );
     auto d = get_less_than_solver_for( level ).get_core_mapped( t, [ & ]( literal lit ){ return prime( lit ); } );
@@ -949,8 +946,8 @@ bool verifier_split::propagate_equality()
         {
             if ( !has_equality_middle_point( c.literals(), d.literals(), i + 1 ) )
             {
-                auto [ gen_c, gen_d, gen_level ] = equality_generalize_from_core( c.literals(), d.literals(), i + 1 );
-                block_equality_arrow_at( cube{ std::move( gen_c ), is_sorted }, cube{ std::move( gen_d ), is_sorted }, gen_level );
+                auto [ gen_c, gen_d ] = equality_generalize_from_core( c.literals(), d.literals(), i + 1 );
+                block_equality_arrow_at( cube{ std::move( gen_c ), is_sorted }, cube{ std::move( gen_d ), is_sorted }, i + 1 );
             }
             else
             {
