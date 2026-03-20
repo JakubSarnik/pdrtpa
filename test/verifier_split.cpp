@@ -195,6 +195,30 @@ TEST_CASE( "SPLIT: Unsafe state is not reachable in a two state system" )
     REQUIRE( !cex.has_value() );
 }
 
+TEST_CASE( "SPLIT: Simple counter with an error after 4 steps" )
+{
+    const auto* const str =
+        "aag 5 0 2 0 3 1\n"
+        "2 10\n"
+        "4 5\n"
+        "6\n"
+        "6 4 2\n"
+        "8 5 3\n"
+        "10 9 7\n";
+
+    auto store = variable_store{};
+    const auto system = system_from_aiger( store, str );
+
+    auto checker = verifier_split{ store, system, seed };
+    const auto cex = checker.run();
+
+    REQUIRE( cex.has_value() );
+    REQUIRE( cex->size() == 4 );
+
+    REQUIRE( system.initial_cube() == std::vector< bool >( 2, false ) );
+    REQUIRE( std::ranges::all_of( *cex, []( const std::vector< literal >& inputs ){ return inputs.empty(); } ) );
+}
+
 TEST_CASE( "SPLIT: Simple counter with an error after 16 steps" )
 {
     const auto* const str =
