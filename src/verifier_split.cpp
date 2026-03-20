@@ -574,7 +574,7 @@ auto verifier_split::generalize_blocked_equality_arrow( std::span< const literal
         if ( const auto erased = std::erase( drop_from, lit ); erased == 0 )
             return;
 
-        if ( has_edge( c, d ) || has_equality_middle_point( c, d, level ) )
+        if ( has_equality_middle_point( c, d, level ) )
             insert_sorted( drop_from, lit );
         else
             std::tie( c, d  ) = equality_generalize_from_core( c, d, level );
@@ -615,7 +615,7 @@ auto verifier_split::equality_generalize_from_core( std::span< const literal > s
     // two formulae are still unsatisfiable when c is substituted for s
     // and d for t.
 
-    assert( 1 <= level && level <= depth() );
+    assert( 1 <= level && level <= depth() + 1 );
     assert( is_state_cube( s ) );
     assert( is_state_cube( t ) );
     // CONTRACT: The previous SAT call was has_equality_middle_point and it
@@ -626,40 +626,7 @@ auto verifier_split::equality_generalize_from_core( std::span< const literal > s
 
     // Cores ensure that
     //   c /\ TF[ k - 1 ]( X, X° ) /\ TF[ k - 1 ]( X°, X' ) /\ d'
-    // is unsatisfiable. We now need to make sure that no state in c can
-    // reach a state in d in one step.
-
-    while ( has_edge( c, d ) )
-    {
-        // Small experiments suggest that preference for adding to c is a more
-        // performant strategy than preferring d (or tossing a coin). There
-        // are, however, some benchmarks where that is not the case, but we
-        // know of no heuristic that would choose this dynamically and more
-        // intelligently.
-
-        const auto ss = _one_step_solver.get_model( _system->state_vars() );
-        const auto c_conflict = find_conflict_sorted( s, ss );
-
-        if ( c_conflict.has_value() )
-        {
-            c.push_back( *c_conflict );
-        }
-        else
-        {
-            const auto tt = unprime( _one_step_solver.get_model( _system->next_state_vars() ) );
-            const auto d_conflict = find_conflict_sorted( t, tt );
-
-            assert( d_conflict.has_value() );
-            d.push_back( *d_conflict );
-        }
-    }
-
-    sort_literals( c );
-    sort_literals( d );
-
-    // The formula
-    //   c /\ TF=[ k - 1 ]( X, X° ) /\ TF=[ k - 1 ]( X°, X' ) /\ d'
-    // must still be unsatisfiable.
+    // is unsatisfiable.
 
     assert( !has_equality_middle_point( c, d, level ) );
 
@@ -769,33 +736,21 @@ auto verifier_split::less_than_generalize_from_core( std::span< const literal > 
 
     assert( !has_less_than_middle_point( c, d, level ) );
 
-    if ( level >= 2 )
-    {
-        int j = depth();
-
-        for ( int i = level - 1; i <= depth(); ++i )
-        {
-            if ( get_less_than_solver_for( level ).is_in_core( _less_than_trace_activators[ i ] ) )
-            {
-                j = i;
-                break;
-            }
-        }
-
-        level = std::min( j + 1, depth() );
-    }
+    // TODO: Remove the level parameter from the function
 
     return { std::move( c ), std::move( d ), level };
 }
 
 void verifier_split::block_equality_arrow_at( cube s, cube t, int level )
 {
-    assert( 1 <= level && level <= depth() );
+    assert( 1 <= level && level <= depth() + 1 );
     assert( is_state_cube( s.literals() ) );
     assert( is_state_cube( t.literals() ) );
 
+    const auto k = std::min( level, depth() );
+
     // We want to block s /\ t' as a model of
-    //   TF=[ k - 1 ]( X, X° ) /\ TF=[ k - 1 ]( X°, X' ).
+    //   TF=[ k ]( X, X' ), TF=[ k ]( X, X° ) and TF=[ k ]( X°, X' ).
     // That is, we need to add s /\ t' to the equality frame TF=[ k ] and
     // assert
     //   - ~(s /\ t') in the equality error solver,
@@ -803,7 +758,7 @@ void verifier_split::block_equality_arrow_at( cube s, cube t, int level )
     //   - ~(s /\ t°) in the less-than consecution solver,
     // always activated by the equality activator at level k.
 
-    auto& arrows = _equality_trace_blocked_arrows[ level ];
+    auto& arrows = _equality_trace_blocked_arrows[ k ];
 
     for ( std::size_t i = 0; i < arrows.size(); )
     {
@@ -821,10 +776,10 @@ void verifier_split::block_equality_arrow_at( cube s, cube t, int level )
             ++i;
     }
 
-    assert( level < _equality_trace_blocked_arrows.size() );
-    assert( level < _equality_trace_activators.size() );
+    assert( k < _equality_trace_blocked_arrows.size() );
+    assert( k < _equality_trace_activators.size() );
 
-    const auto v = _equality_trace_activators[ level ].var();
+    const auto v = _equality_trace_activators[ k ].var();
     const auto circled_left = union_sorted( s.literals(), circle( t.literals() ) ).negate().activate( v );
 
     _equality_error_solver.assert_formula( union_sorted( s.literals(), prime( t.literals() ) ).negate().activate( v ) );
@@ -833,7 +788,7 @@ void verifier_split::block_equality_arrow_at( cube s, cube t, int level )
 
     _less_than_consecution_solver.assert_formula( circled_left );
 
-    _equality_trace_blocked_arrows[ level ].emplace_back( std::move( s ), std::move( t ) );
+    _equality_trace_blocked_arrows[ k ].emplace_back( std::move( s ), std::move( t ) );
 }
 
 void verifier_split::block_less_than_arrow_at( cube s, cube t, int level, int start_from /* = 1 */ )
@@ -844,15 +799,12 @@ void verifier_split::block_less_than_arrow_at( cube s, cube t, int level, int st
     assert( is_state_cube( t.literals() ) );
 
     // We want to block s /\ t' as a model of
-    //   TF=[ k - 1 ]( X, X° ) /\ TF<[ k - 1 ]( X°, X' ).
+    //   TF<[ k ]( X, X' ) (error) and TF<[ k ]( X°, X' ) (consecution).
     // That is, we need to add s /\ t' to the less-than frame TF<[ k ] and
     // assert
-    //   - ~(s /\ t') in the less-than error solver,
-    //   - ~(s° /\ t') in the less-than consecution solver, and
-    //   - ~(s /\ t°) in the equality consecution solver.
-    //
-    // In the first two cases, it is activated by the less-than activator
-    // at level k, and in the third case, by the equality activator at level k.
+    //   - ~(s /\ t') in the less-than error solver, and
+    //   - ~(s° /\ t') in the less-than consecution solver
+    // always activated by the less-than activator at level k.
 
     for ( int d = start_from; d <= level; ++d )
     {
@@ -877,14 +829,11 @@ void verifier_split::block_less_than_arrow_at( cube s, cube t, int level, int st
 
     assert( level < _less_than_trace_blocked_arrows.size() );
     assert( level < _less_than_trace_activators.size() );
-    assert( level < _equality_trace_activators.size() );
 
-    const auto v_lt = _less_than_trace_activators[ level ].var();
-    const auto v_eq = _equality_trace_activators[ level ].var();
+    const auto v = _less_than_trace_activators[ level ].var();
 
-    _less_than_error_solver.assert_formula( union_sorted( s.literals(), prime( t.literals() ) ).negate().activate( v_lt ) );
-    _less_than_consecution_solver.assert_formula( union_sorted( prime( t.literals() ), circle( s.literals() ) ).negate().activate( v_lt ) );
-    _equality_consecution_solver.assert_formula( union_sorted( s.literals(), circle( t.literals() ) ).negate().activate( v_eq ) );
+    _less_than_error_solver.assert_formula( union_sorted( s.literals(), prime( t.literals() ) ).negate().activate( v ) );
+    _less_than_consecution_solver.assert_formula( union_sorted( prime( t.literals() ), circle( s.literals() ) ).negate().activate( v ) );
 
     _less_than_trace_blocked_arrows[ level ].emplace_back( std::move( s ), std::move( t ) );
 }
