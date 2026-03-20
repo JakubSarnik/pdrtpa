@@ -48,8 +48,8 @@ private:
     // which leads to the formula
     //   s /\ T(X, Y, X') /\ t'.
 
-    solver _equality_error_solver; // Solves I(X) /\ TF[i]=(X, X') /\ ~P'
-    solver _less_than_error_solver; // Solves I(X) /\ TF[i]<(X, X') /\ ~P'
+    solver _equality_error_solver; // Solves I(X) /\ TF=[i](X, X') /\ ~P'
+    solver _less_than_error_solver; // Solves I(X) /\ TF<[i](X, X') /\ ~P'
     solver _one_step_solver; // Solves s /\ T(X, Y, X') /\ t'
     solver _two_steps_solver; // Solves s /\ T(X, Y1, X°) /\ T(X°, Y2, X') /\ t'
     solver _equality_consecution_solver; // Solves s /\ TF=[i](X, X°) /\ TF=[i](X°, X') /\ t'
@@ -66,7 +66,6 @@ private:
     cnf_formula _left_trans; // T(X, Y1, X°)
     cnf_formula _right_trans; // T(X°, Y2, X')
 
-    // TODO: Store only if we propagate equality frames
     std::vector< std::vector< std::pair< cube, cube > > > _equality_trace_blocked_arrows;
     std::vector< std::vector< std::pair< cube, cube > > > _less_than_trace_blocked_arrows;
 
@@ -237,7 +236,7 @@ private:
             case 1:
                 return _one_step_solver;
             default:
-                return _equality_consecution_solver;
+                return _less_than_consecution_solver;
         }
     }
 
